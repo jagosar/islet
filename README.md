@@ -114,13 +114,14 @@ focus countdown ticks once per second only while it runs.
 ```bash
 npm install
 npm run build          # TypeScript -> dist/
-npm test               # unit tests for the pure core (Node)
-npm run test:gjs       # smoke test of the built core under GJS
-npm run lint
+npm run test:all       # typecheck, strict lint, unit with coverage gate, GJS smoke, integration and package tests
+npm run e2e            # end to end in a nested GNOME Shell (needs mutter-dev-bin)
 npm run nested         # run dist/ in an isolated nested GNOME Shell
 npm run nested:zip     # pack, install the zip and run it in the nested Shell
 npm run release        # build islet-VERSION.tar.gz with the installer
 ```
+
+How it is tested, and what is deliberately not automated: [docs/TESTING.md](docs/TESTING.md).
 
 The nested Shell never touches your real session: it gets its own configuration, data, cache
 and D-Bus session under `$XDG_RUNTIME_DIR/islet-devkit/`. The design is in

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import {projectName, type AgentEvent} from './agentEvents.js';
 import type {AgentSession, SessionState} from './protocol.js';
 

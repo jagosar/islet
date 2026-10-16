@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -28,7 +29,7 @@ export class StateStore {
             Gio.File.new_for_path(this.path(name)).replace_contents(
                 new TextEncoder().encode(text), null, false, Gio.FileCreateFlags.PRIVATE, null);
         } catch (error) {
-            console.warn(`islet-daemon: could not save ${name}: ${error}`);
+            console.warn(`islet-daemon: could not save ${name}: ${String(error)}`);
         }
     }
 

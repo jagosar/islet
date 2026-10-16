@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /**
  * The D-Bus contract between the daemon, the extension and the Claude Code bridges.
  *

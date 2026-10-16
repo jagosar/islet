@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /**
  * The focus timer. Pure and clock-free: every operation takes `now` (Unix epoch seconds), so a
  * timer survives restarts by being stored and read back, and a session that ended while the
@@ -128,8 +129,8 @@ export function decodeFocusState(text: string): FocusState {
     const decodedHistory: Record<string, FocusDay> = {};
     if (typeof history === 'object' && history !== null) {
         for (const [day, entry] of Object.entries(history)) {
-            const e = entry as Record<string, unknown>;
-            if (/^\d{4}-\d{2}-\d{2}$/.test(day) && n(e?.minutes) && n(e?.sessions))
+            const e = entry as Record<string, unknown> | null; // A JSON null is possible.
+            if (e && /^\d{4}-\d{2}-\d{2}$/.test(day) && n(e.minutes) && n(e.sessions))
                 decodedHistory[day] = {minutes: e.minutes as number, sessions: e.sessions as number};
         }
     }

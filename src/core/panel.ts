@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /** Formatting and layout for the expanded view, kept pure so it is unit tested. */
 import type {SessionState, UsageSnapshot} from './protocol.js';
 import {daysBefore} from './usage/snapshot.js';

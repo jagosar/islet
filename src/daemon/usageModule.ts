@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import System from 'system';
@@ -83,7 +84,7 @@ export class UsageModule {
             enumerator = Gio.File.new_for_path(dir).enumerate_children(
                 'standard::name,standard::type,time::modified', Gio.FileQueryInfoFlags.NONE, null);
         } catch (error) {
-            console.warn(`islet-daemon: cannot watch a transcript folder: ${error}`);
+            console.warn(`islet-daemon: cannot watch a transcript folder: ${String(error)}`);
             return;
         }
 
@@ -150,8 +151,12 @@ export class UsageModule {
             return;
         this.sliceId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
             const deadline = GLib.get_monotonic_time() + SLICE_MS * 1000;
-            while (this.queue.length && GLib.get_monotonic_time() < deadline)
-                this.readNew(this.queue.shift()!);
+            while (GLib.get_monotonic_time() < deadline) {
+                const path = this.queue.shift();
+                if (path === undefined)
+                    break;
+                this.readNew(path);
+            }
             if (this.queue.length)
                 return GLib.SOURCE_CONTINUE;
             this.sliceId = 0;
@@ -184,6 +189,7 @@ export class UsageModule {
             // Line by line: decoding large chunks into strings kept ~190 MB of a 200 MB history
             // resident; reading lines peaks below 50 MB at the same speed (issue #16).
             const raw = file.read(null);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-assignment -- the Gio typings name GLib's enum separately
             raw.seek(cursor.offset, GLib.SeekType.SET, null);
             const stream = new Gio.DataInputStream({base_stream: raw});
             for (;;) {
@@ -199,7 +205,7 @@ export class UsageModule {
             }
             stream.close(null);
         } catch (error) {
-            console.warn(`islet-daemon: cannot read a transcript: ${error}`);
+            console.warn(`islet-daemon: cannot read a transcript: ${String(error)}`);
         }
     }
 
@@ -229,9 +235,10 @@ export class UsageModule {
     /** "Today" changes at local midnight even when nothing is written. */
     private scheduleMidnight(): void {
         const now = GLib.DateTime.new_now_local();
-        const tomorrow = now.add_days(1)!;
-        const midnight = GLib.DateTime.new_local(tomorrow.get_year(), tomorrow.get_month(), tomorrow.get_day_of_month(), 0, 0, 1);
-        const seconds = Math.max(1, Math.ceil(Number(midnight.difference(now)) / 1_000_000));
+        const tomorrow = now.add_days(1);
+        // add_days only fails past the year 9999; check again in an hour if it ever does.
+        const midnight = tomorrow && GLib.DateTime.new_local(tomorrow.get_year(), tomorrow.get_month(), tomorrow.get_day_of_month(), 0, 0, 1);
+        const seconds = midnight ? Math.max(1, Math.ceil(Number(midnight.difference(now)) / 1_000_000)) : 3600;
         this.midnightId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, seconds, () => {
             this.midnightId = 0;
             this.publish();

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -62,6 +63,11 @@ export class Capsule extends PanelMenu.Button {
 
     get shownText(): string {
         return this.label.text;
+    }
+
+    /** Width of the clock-centring spacer, for the development debug service. */
+    get mirrorWidth(): number | null {
+        return this.mirror ? Math.round(this.mirror.width) : null;
     }
 
     get compactText(): string {

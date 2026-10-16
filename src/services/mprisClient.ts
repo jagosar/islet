@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -57,11 +58,13 @@ export class MprisClient {
             null, new GLib.VariantType('(as)'), Gio.DBusCallFlags.NONE, CALL_TIMEOUT_MS, this.cancellable,
             (connection, result) => {
                 try {
-                    const [names] = connection!.call_finish(result).deepUnpack() as [string[]];
+                    if (!connection)
+                        return;
+                    const [names] = connection.call_finish(result).deepUnpack() as [string[]];
                     names.filter(name => name.startsWith(`${NAME_PREFIX}.`)).forEach(name => this.add(name));
                 } catch (error) {
                     if (!this.cancellable.is_cancelled())
-                        console.warn(`Islet: could not list media players: ${error}`);
+                        console.warn(`Islet: could not list media players: ${String(error)}`);
                 }
             });
     }

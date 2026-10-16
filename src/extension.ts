@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -14,6 +15,7 @@ import {LiveQueue, compactView, liveActivityForAgentEvent, planThresholdCrossed}
 import {activePlayer, trackKey, trackLine, type MediaPlayer} from './core/media.js';
 import {DaemonClient, type DaemonState} from './services/daemonClient.js';
 import {FocusController} from './services/focusController.js';
+import {formatLocal} from './services/localTime.js';
 import {MprisClient} from './services/mprisClient.js';
 import {Capsule, CapsuleSpacer} from './ui/capsule.js';
 import {ClaudePanel} from './ui/claudePanel.js';
@@ -156,7 +158,7 @@ export default class IsletExtension extends Extension {
         const crossed = this.state?.available ? planThresholdCrossed(this.state.plan, state.plan) : null;
         this.state = state;
         if (crossed !== null && state.plan?.fiveHour) {
-            const reset = GLib.DateTime.new_from_unix_local(state.plan.fiveHour.resetsAt)?.format('%H:%M') ?? '';
+            const reset = formatLocal(state.plan.fiveHour.resetsAt, '%H:%M');
             this.pushLive({
                 key: 'plan',
                 text: _('Claude plan at %s · resets %s').replace('%s', `${crossed}%`).replace('%s', reset),
@@ -272,6 +274,6 @@ export default class IsletExtension extends Extension {
                 if (this.capsule && this.expanded)
                     this.debug = new DebugService(this.capsule, this.expanded);
             })
-            .catch(error => console.warn(`Islet: debug service unavailable: ${error}`));
+            .catch((error: unknown) => console.warn(`Islet: debug service unavailable: ${String(error)}`));
     }
 }

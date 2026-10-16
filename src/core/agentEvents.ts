@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /** An event from a Claude Code session, reduced to the fields Islet uses. */
 export interface AgentEvent {
     sessionId: string;

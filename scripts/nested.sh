@@ -41,10 +41,17 @@ export XDG_CACHE_HOME="$sandbox/cache"
 export XDG_STATE_HOME="$sandbox/state"
 
 # The bus address is saved for scripts/dev-hook.sh, which sends Claude Code hook events here.
+# The script is single-quoted on purpose: $1, $2 and $3 belong to the inner shell.
+# shellcheck disable=SC2016
 exec dbus-run-session -- bash -c '
     if [ "$3" != "--installed" ]; then
         gsettings set org.gnome.shell disable-user-extensions false
         gsettings set org.gnome.shell enabled-extensions "[\"$1\"]"
+    fi
+    # Animations only advance while the nested window is being painted; tests that need
+    # deterministic widths turn them off (this is also what "reduce animation" does).
+    if [ -n "${ISLET_NESTED_NO_ANIMATIONS:-}" ]; then
+        gsettings set org.gnome.desktop.interface enable-animations false
     fi
     echo "$DBUS_SESSION_BUS_ADDRESS" > "$2/bus-address"
     ISLET_DEV_DEBUG=1 exec gnome-shell --devkit --wayland

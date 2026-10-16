@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 // Development only. Loaded by the extension when ISLET_DEV_DEBUG is set (scripts/nested.sh does
 // this) and left out of the packaged extension by scripts/pack.sh. It lets scripts inspect the
 // capsule and take screenshots of the nested Shell, which has no other way in from outside.
@@ -61,6 +62,7 @@ export class DebugService {
             page: this.expanded.selectedPage,
             keyFocus: describeFocus(global.stage.get_key_focus()),
             capsule: box(this.capsule.container),
+            spacerWidth: this.capsule.mirrorWidth,
             capsulePreferred: Math.round(this.capsule.container.get_preferred_width(-1)[1]),
             contentPreferred: Math.round(this.capsule.get_preferred_width(-1)[1]),
             capsuleTransition: Boolean(this.capsule.container.get_transition('width')),
