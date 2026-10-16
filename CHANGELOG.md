@@ -78,3 +78,4 @@ First release, for GNOME Shell 50.
 - Preferences: connect or disconnect Claude Code (backup, exact preview, byte-exact undo) and the
   keyboard shortcut (`Ctrl+Alt+Space` by default).
 - `install.sh` and `uninstall.sh` for a per-user install without root.
+
