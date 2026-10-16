@@ -33,8 +33,10 @@ jobs:
       - run: npm run typecheck
       # Strict, type-aware rules for src/ (see eslint.config.js).
       - run: npm run lint
+      # Warnings and errors only: the style notes differ between ShellCheck versions, and the
+      # runner image's version is not ours to pin.
       - name: ShellCheck
-        run: shellcheck -x scripts/*.sh packaging/*.sh tests/e2e/run.sh
+        run: shellcheck --severity=warning -x scripts/*.sh packaging/*.sh tests/e2e/run.sh
 
   unit:
     name: Unit tests (Node ${{ matrix.node }})

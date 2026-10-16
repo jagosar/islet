@@ -10,7 +10,7 @@
 # capsule text, live activities, the keyboard shortcut and tabs, and a daemon crash and restart.
 # Nothing touches the real session, the real ~/.claude, or the real state directories.
 # These helpers are run indirectly, by wait_for.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -39,7 +39,10 @@ shown_starts() { [[ "$(shown)" == "$1"* ]]; }
 available() { [ "$(field "['available']")" = True ]; }
 unavailable() { [ "$(field "['available']")" = False ]; }
 
-command -v gnome-shell >/dev/null && [ -x /usr/libexec/mutter-devkit ] || { echo "needs gnome-shell and mutter-dev-bin"; exit 2; }
+if ! command -v gnome-shell >/dev/null || [ ! -x /usr/libexec/mutter-devkit ]; then
+    echo "needs gnome-shell and mutter-dev-bin"
+    exit 2
+fi
 (cd "$root" && npm run -s build) || exit 2
 
 # Synthetic transcripts: 1,000 fresh tokens today.
