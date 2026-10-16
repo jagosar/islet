@@ -14,10 +14,12 @@ import {BUS_NAME} from '../core/dbus.js';
 import {IsletService} from './service.js';
 import {SessionsModule} from './sessionsModule.js';
 import {StateStore} from './stateStore.js';
+import {UsageModule} from './usageModule.js';
 
 const loop = new GLib.MainLoop(null, false);
 const service = new IsletService(new StateStore());
 new SessionsModule(service);
+new UsageModule(service).start();
 
 Gio.bus_own_name(
     Gio.BusType.SESSION,

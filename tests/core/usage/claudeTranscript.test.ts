@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {freshTokens, parseUsageLine, processedTokens} from '../../../src/core/usage/claudeTranscript.js';
+import {freshTokens, mayHoldUsage, parseCostStateLine, parseUsageLine, processedTokens} from '../../../src/core/usage/claudeTranscript.js';
 
 function assistantLine(overrides: Record<string, unknown> = {}, message: Record<string, unknown> = {}, usage: Record<string, unknown> = {}): string {
     return JSON.stringify({
@@ -55,6 +55,48 @@ describe('parseUsageLine', () => {
         ['a JSON array', '[]'],
     ])('ignores %s', (_name, line) => {
         expect(parseUsageLine(line)).toBeNull();
+    });
+});
+
+describe('parseCostStateLine', () => {
+    const line = JSON.stringify({
+        type: 'cost-state',
+        sessionId: 's1',
+        totalCostUSD: 0.01,
+        modelUsage: {
+            'claude-haiku-5-5': {inputTokens: 24, outputTokens: 884, thinkingTokens: 460, cacheReadInputTokens: 527082, cacheCreationInputTokens: 31785, costUSD: 0.01},
+        },
+    });
+
+    it('reads Claude Code\'s totals per model', () => {
+        expect(parseCostStateLine(line)).toEqual({
+            sessionId: 's1',
+            models: new Map([['claude-haiku-5-5', {input: 24, cacheWrite: 31785, cacheRead: 527082, output: 884}]]),
+        });
+    });
+
+    it('reads an empty modelUsage', () => {
+        expect(parseCostStateLine(JSON.stringify({type: 'cost-state', sessionId: 's', modelUsage: {}}))?.models.size).toBe(0);
+    });
+
+    it.each([
+        ['an assistant line', assistantLine()],
+        ['a negative count', line.replace('"inputTokens":24', '"inputTokens":-1')],
+        ['no session', JSON.stringify({type: 'cost-state', modelUsage: {}})],
+        ['truncated JSON', line.slice(0, 40)],
+    ])('ignores %s', (_name, text) => {
+        expect(parseCostStateLine(text)).toBeNull();
+    });
+});
+
+describe('mayHoldUsage', () => {
+    it('lets usage and cost-state lines through', () => {
+        expect(mayHoldUsage(assistantLine())).toBe(true);
+        expect(mayHoldUsage('{"type":"cost-state"}')).toBe(true);
+    });
+
+    it('skips other lines', () => {
+        expect(mayHoldUsage(JSON.stringify({type: 'user', message: {content: 'assistant'}}))).toBe(false);
     });
 });
 
