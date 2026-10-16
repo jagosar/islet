@@ -30,12 +30,23 @@ function reportPlanUsage(report: Record<string, number>): void {
     }
 }
 
-/** Runs the user's previous status line command with the same stdin; returns its stdout. */
+/**
+ * Runs the user's previous status line command with the same stdin; returns its stdout.
+ *
+ * The input goes through a temporary file, not a pipe: a command that never reads its stdin
+ * (`printf hello`) exits before a pipe write completes, the write fails with EPIPE, and the
+ * command's output would be lost with it.
+ */
 function runPrevious(command: string, input: Uint8Array): string {
+    const [fd, inputPath] = GLib.file_open_tmp('islet-statusline-XXXXXX');
+    GLib.close(fd);
+    GLib.file_set_contents(inputPath, input);
+
     const loop = new GLib.MainLoop(null, false);
     const cancellable = new Gio.Cancellable();
-    const process = Gio.Subprocess.new(['sh', '-c', command],
-        Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE);
+    const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDOUT_PIPE});
+    launcher.set_stdin_file_path(inputPath);
+    const process = launcher.spawnv(['sh', '-c', command]);
     let output = '';
 
     const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PREVIOUS_TIMEOUT_MS, () => {
@@ -45,7 +56,7 @@ function runPrevious(command: string, input: Uint8Array): string {
         loop.quit();
         return GLib.SOURCE_REMOVE;
     });
-    process.communicate_async(new GLib.Bytes(input), cancellable, (_process, result) => {
+    process.communicate_async(null, cancellable, (_process, result) => {
         try {
             const [, stdout] = process.communicate_finish(result);
             output = stdout ? new TextDecoder().decode(stdout.toArray()) : '';
@@ -57,6 +68,7 @@ function runPrevious(command: string, input: Uint8Array): string {
     loop.run();
     if (!cancellable.is_cancelled())
         GLib.source_remove(timeoutId);
+    GLib.unlink(inputPath);
     return output;
 }
 

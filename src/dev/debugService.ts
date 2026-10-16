@@ -21,6 +21,7 @@ const XML = `
     <method name="ToggleMenu"/>
     <method name="SelectPage"><arg type="s" name="id" direction="in"/></method>
     <method name="PressKeys"><arg type="s" name="combo" direction="in"/></method>
+    <method name="Click"><arg type="d" name="x" direction="in"/><arg type="d" name="y" direction="in"/></method>
   </interface>
 </node>`;
 
@@ -97,6 +98,15 @@ export class DebugService {
             keyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
         for (const keyval of [...keyvals].reverse())
             keyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
+    }
+
+    /** Moves a virtual pointer to (x, y) in stage coordinates and clicks. */
+    Click(x: number, y: number): void {
+        const pointer = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        let time = Math.floor(global.get_current_time() * 1000);
+        pointer.notify_absolute_motion(time++, x, y);
+        pointer.notify_button(time++, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
+        pointer.notify_button(time, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
     }
 
     stop(): void {
