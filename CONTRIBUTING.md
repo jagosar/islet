@@ -28,8 +28,8 @@ npm run nested        # try the extension in an isolated nested GNOME Shell (nee
 ## Pull requests
 
 `main` is protected: open a pull request, and the **CI passed** check must be green. Fill in the
-template's test checklist. Pull requests are **squash-merged** (history stays linear, and the
-commit keeps the pull request's author, so a maintainer's commit email stays the one they chose);
+template's test checklist. Pull requests are **rebase-merged** (history stays linear, and the
+commits keep their own author; GitHub's squash and merge commits use the account's primary email instead);
 branches are deleted after merging.
 
 By contributing you agree that your work is released under the GPL-2.0-or-later license.
