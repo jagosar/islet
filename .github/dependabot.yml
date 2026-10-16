@@ -14,6 +14,12 @@ updates:
     ignore:
       # The GNOME Shell and GJS typings follow the GNOME release Islet targets, by hand.
       - dependency-name: '@girs/*'
+      # TypeScript 7 (the native compiler) is not supported by typescript-eslint yet, which
+      # refuses to run on it and whose peer range stops below 6.1; the strict type-aware lint is
+      # part of the quality gate. Revisit when typescript-eslint supports TypeScript 7:
+      # https://github.com/typescript-eslint/typescript-eslint/issues/10940
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -21,6 +21,9 @@ npm run nested        # try the extension in an isolated nested GNOME Shell (nee
   transcripts differently must keep it green.
 - **Privacy is a feature.** Do not read message content, and do not add network access.
 - New files carry `// SPDX-License-Identifier: GPL-2.0-or-later` followed by a blank line.
+- Maintainers keep their personal email out of the public history: `npm run hooks` enables a
+  `commit-msg` hook that refuses commits not authored with a GitHub noreply address. (Contributors
+  are not asked to do this.)
 
 ## Pull requests
 

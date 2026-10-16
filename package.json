@@ -19,7 +19,8 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "npm run build && vitest run --config vitest.integration.config.ts",
     "test:all": "npm run typecheck && npm run lint && npm run test:coverage && npm run test:gjs && npm run test:integration",
-    "e2e": "tests/e2e/run.sh"
+    "e2e": "tests/e2e/run.sh",
+    "hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
