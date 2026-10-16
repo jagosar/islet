@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 // islet-statusline: a Claude Code status line command, run as
 // `gjs -m bridge/statusline.js [PREVIOUS]` with the session JSON on stdin.
 //
@@ -45,12 +46,18 @@ function runPrevious(command: string, input: Uint8Array): string {
 
     const loop = new GLib.MainLoop(null, false);
     const cancellable = new Gio.Cancellable();
-    const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDOUT_PIPE});
+    // Stderr is discarded: a command that leaves a background process behind would otherwise
+    // keep Claude Code's stderr pipe open and stall it. `timeout` ends the command's whole process
+    // group at the deadline, so a hanging status line cannot pile up orphans (one per refresh).
+    const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
     launcher.set_stdin_file_path(inputPath);
-    const process = launcher.spawnv(['sh', '-c', command]);
+    const guard = GLib.find_program_in_path('timeout');
+    const process = launcher.spawnv(guard
+        ? [guard, '--kill-after=1', String(PREVIOUS_TIMEOUT_MS / 1000), 'sh', '-c', command]
+        : ['sh', '-c', command]);
     let output = '';
 
-    const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PREVIOUS_TIMEOUT_MS, () => {
+    const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PREVIOUS_TIMEOUT_MS + 1500, () => {
         cancellable.cancel();
         process.force_exit();
         // Stop waiting now: a grandchild (e.g. `sleep`) can keep the pipe open after `sh` dies.

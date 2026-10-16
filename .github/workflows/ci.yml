@@ -4,39 +4,114 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly, so a new advisory in a dependency shows up even when nobody pushes.
+    - cron: '17 5 * * 1'
 
 permissions:
   contents: read
 
+# A newer push to the same pull request makes the older run pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  build-and-test:
-    name: Typecheck, lint, test and pack
+  static:
+    name: Typecheck, lint and shell scripts
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # CI never pushes, so the token does not need to stay in the checkout.
           persist-credentials: false
-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-
       - run: npm ci
       - run: npm run typecheck
+      # Strict, type-aware rules for src/ (see eslint.config.js).
       - run: npm run lint
-      - run: npm test
+      - name: ShellCheck
+        run: shellcheck -x scripts/*.sh packaging/*.sh tests/e2e/run.sh
 
-      # The core also runs inside GNOME Shell and the daemon, so check it under GJS too. The
-      # build compiles the GSettings schemas (glib-compile-schemas, from libglib2.0-bin).
-      - name: Install GJS and GLib tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends gjs libglib2.0-bin
+  unit:
+    name: Unit tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # Fails below the coverage thresholds in vitest.config.ts (src/core).
+      - run: npm run test:coverage
+      - name: Coverage summary
+        if: matrix.node == 24
+        run: |
+          {
+            echo '### Coverage of `src/core`'
+            echo '```'
+            node -e "const t=require('./coverage/coverage-summary.json').total;for(const k of ['lines','statements','functions','branches'])console.log(k.padEnd(11)+t[k].pct+'%')"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  integration:
+    name: Integration and package tests (GJS, D-Bus)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install GJS and the GLib, D-Bus and zip tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends gjs libglib2.0-bin dbus unzip
+      - run: npm ci
+      # The core under GJS, the runtime of the extension and the daemon.
       - run: npm run test:gjs
-
+      # The real daemon and bridges on a private D-Bus session, the packed extension, and the
+      # installer against stand-ins for gnome-extensions and gsettings.
+      - run: npm run test:integration
       - run: npm run pack
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: islet-extension
           path: islet@jagosar.github.io.zip
           if-no-files-found: error
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm audit --audit-level=high
+
+  # One stable name to require in branch protection, whatever jobs are added or renamed above.
+  ci-ok:
+    name: CI passed
+    if: always()
+    needs: [static, unit, integration, audit]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs) }}'
+          test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false

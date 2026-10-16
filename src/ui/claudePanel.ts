@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -12,6 +13,7 @@ import {HEATMAP_WEEKS, formatAgo, formatDuration, heatmapCells, sessionStateLabe
 import type {PlanWindow} from '../core/protocol.js';
 import {freshTokens, processedTokens, type TokenCounts} from '../core/usage/claudeTranscript.js';
 import type {DaemonState} from '../services/daemonClient.js';
+import {formatLocal} from '../services/localTime.js';
 
 const CELL = 9;
 const GAP = 2;
@@ -31,10 +33,6 @@ function sumTokens(models: Record<string, TokenCounts>): TokenCounts {
         total.output += tokens.output;
     }
     return total;
-}
-
-function formatClock(epochSeconds: number): string {
-    return GLib.DateTime.new_from_unix_local(epochSeconds)?.format('%H:%M') ?? '';
 }
 
 /** The 26-week usage graph, drawn in one actor with Cairo in the theme's text colour. */
@@ -111,7 +109,7 @@ class PlanBar extends St.BoxLayout {
         if (!window)
             return;
         const percent = Math.round(window.usedPercentage);
-        this.value.text = _('%s · resets %s').replace('%s', `${percent}%`).replace('%s', formatClock(window.resetsAt));
+        this.value.text = _('%s · resets %s').replace('%s', `${percent}%`).replace('%s', formatLocal(window.resetsAt, '%H:%M'));
         this.fraction = Math.min(100, window.usedPercentage) / 100;
         this.layoutFill();
         this.fill.set_style_class_name(percent >= 90 ? 'islet-bar-fill islet-bar-high' : 'islet-bar-fill');

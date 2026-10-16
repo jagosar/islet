@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -6,13 +7,14 @@ import {
     FOCUS_HISTORY_DAYS, completeIfDue, decodeFocusState, initialFocusState, pause, pruneHistory, resume, start, stop,
     type FocusState,
 } from '../core/focus.js';
+import {formatLocal} from './localTime.js';
 
 function nowSeconds(): number {
     return Math.floor(GLib.get_real_time() / 1_000_000);
 }
 
 function localDay(epochSeconds: number): string {
-    return GLib.DateTime.new_from_unix_local(epochSeconds)?.format('%Y-%m-%d') ?? '';
+    return formatLocal(epochSeconds, '%Y-%m-%d');
 }
 
 /** Today and the days before it that the history keeps. */
@@ -116,18 +118,16 @@ export class FocusController {
     }
 
     private save(): void {
-        try {
-            GLib.mkdir_with_parents(this.file.get_parent()!.get_path()!, 0o700);
-        } catch {
-            // replace_contents_async reports the error below.
-        }
+        const folder = this.file.get_parent()?.get_path();
+        if (folder)
+            GLib.mkdir_with_parents(folder, 0o700); // A failure surfaces in the write below.
         const bytes = new TextEncoder().encode(JSON.stringify(this.state));
         this.file.replace_contents_async(bytes, null, false, Gio.FileCreateFlags.PRIVATE, this.cancellable, (_file, result) => {
             try {
                 this.file.replace_contents_finish(result);
             } catch (error) {
                 if (!this.cancellable.is_cancelled())
-                    console.warn(`Islet: could not save the focus timer: ${error}`);
+                    console.warn(`Islet: could not save the focus timer: ${String(error)}`);
             }
         });
     }

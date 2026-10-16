@@ -15,12 +15,17 @@
     "nested": "npm run build && scripts/nested.sh",
     "install-local": "npm run build && scripts/install-local.sh",
     "nested:zip": "npm run build && scripts/nested.sh --zip",
-    "release": "npm run build && scripts/release.sh"
+    "release": "npm run build && scripts/release.sh",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "npm run build && vitest run --config vitest.integration.config.ts",
+    "test:all": "npm run typecheck && npm run lint && npm run test:coverage && npm run test:gjs && npm run test:integration",
+    "e2e": "tests/e2e/run.sh"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@girs/gjs": "5.5.0",
     "@girs/gnome-shell": "50.0.4",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.12.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2",

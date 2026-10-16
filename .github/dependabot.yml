@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One pull request for the lint stack, one for the test stack, so each can be reviewed alone.
+      lint:
+        patterns: ['eslint', '@eslint/*', 'typescript-eslint']
+      test:
+        patterns: ['vitest', '@vitest/*']
+    ignore:
+      # The GNOME Shell and GJS typings follow the GNOME release Islet targets, by hand.
+      - dependency-name: '@girs/*'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

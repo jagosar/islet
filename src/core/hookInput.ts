@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /**
  * The only hook input fields that leave the hook process. Everything else Claude Code sends
  * (messages, prompts, tool input, the last assistant message) stays behind.

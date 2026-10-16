@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 // islet-daemon: run by the extension as `gjs -m daemon/main.js`.
 //
 // Lifecycle rules (no orphans, newest wins):
 // - The bus name is owned with ALLOW_REPLACEMENT | REPLACE, so a newly started daemon takes
 //   over and the previous one exits when it loses the name.
 // - Losing the name or the bus connection ends the process.
-// - When org.gnome.Shell leaves the bus, the daemon exits too.
+// - When org.gnome.Shell leaves the bus, the daemon exits too (unless ISLET_STANDALONE is set).
 // - SIGTERM (sent by the extension's disable()) keeps its default action: exit.
 
 import Gio from 'gi://Gio';
@@ -26,22 +27,26 @@ Gio.bus_own_name(
     Gio.BusType.SESSION,
     BUS_NAME,
     Gio.BusNameOwnerFlags.ALLOW_REPLACEMENT | Gio.BusNameOwnerFlags.REPLACE,
-    connection => service.export(connection),
+    (connection: Gio.DBusConnection) => { service.export(connection); },
     null,
     () => {
         console.log('islet-daemon: bus name lost, exiting');
         loop.quit();
     });
 
-Gio.bus_watch_name(
-    Gio.BusType.SESSION,
-    'org.gnome.Shell',
-    Gio.BusNameWatcherFlags.NONE,
-    null,
-    () => {
-        console.log('islet-daemon: GNOME Shell left the bus, exiting');
-        loop.quit();
-    });
+// ISLET_STANDALONE is for tests and debugging outside GNOME Shell: there is no org.gnome.Shell
+// on the bus then, so the daemon must not exit because of its absence.
+if (!GLib.getenv('ISLET_STANDALONE')) {
+    Gio.bus_watch_name(
+        Gio.BusType.SESSION,
+        'org.gnome.Shell',
+        Gio.BusNameWatcherFlags.NONE,
+        null,
+        () => {
+            console.log('islet-daemon: GNOME Shell left the bus, exiting');
+            loop.quit();
+        });
+}
 
 // The object and the name go away with the bus connection when the process exits.
 loop.run();

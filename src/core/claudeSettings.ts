@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /**
  * Connecting Islet to Claude Code by editing its settings.json: hooks for agent events and the
  * status line for plan usage. Pure, so every rule is unit tested; the callers read and write
@@ -35,7 +36,9 @@ export function toBase64(text: string): string {
     const bytes = new TextEncoder().encode(text);
     let out = '';
     for (let i = 0; i < bytes.length; i += 3) {
-        const [a, b = 0, c = 0] = [bytes[i], bytes[i + 1], bytes[i + 2]];
+        const a = bytes[i];
+        const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+        const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
         const n = (a << 16) | (b << 8) | c;
         out += BASE64[(n >> 18) & 63] + BASE64[(n >> 12) & 63] +
             (i + 1 < bytes.length ? BASE64[(n >> 6) & 63] : '=') +
@@ -98,7 +101,7 @@ function parse(text: string | null): Json {
     try {
         value = JSON.parse(text);
     } catch (error) {
-        throw new SettingsError(`settings.json is not valid JSON (${error instanceof Error ? error.message : error}); Islet will not change it.`);
+        throw new SettingsError(`settings.json is not valid JSON (${error instanceof Error ? error.message : String(error)}); Islet will not change it.`);
     }
     if (!isObject(value))
         throw new SettingsError('settings.json does not contain a JSON object; Islet will not change it.');
@@ -185,9 +188,9 @@ export function disconnectSettings(text: string): string {
                 hooks[event] = groups;
                 continue;
             }
-            const kept = groups
+            const kept = (groups as unknown[])
                 .map(group => isObject(group) && Array.isArray(group.hooks)
-                    ? {...group, hooks: group.hooks.filter(hook => !isOurs(hook))}
+                    ? {...group, hooks: (group.hooks as unknown[]).filter(hook => !isOurs(hook))}
                     : group)
                 .filter(group => !(isObject(group) && Array.isArray(group.hooks) && group.hooks.length === 0));
             if (kept.length)

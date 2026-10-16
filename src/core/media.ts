@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 /** Now playing, from MPRIS players. Pure: the Shell side feeds it unpacked D-Bus properties. */
 
 export type PlaybackStatus = 'Playing' | 'Paused' | 'Stopped';
@@ -47,8 +48,8 @@ export function readStatus(value: unknown): PlaybackStatus {
 export function activePlayer(players: MediaPlayer[]): MediaPlayer | null {
     const withTrack = players.filter(player => player.title);
     const byRecency = (a: MediaPlayer, b: MediaPlayer) => b.changedAt - a.changedAt;
-    return withTrack.filter(p => p.status === 'Playing').sort(byRecency)[0] ??
-        withTrack.sort(byRecency)[0] ?? null;
+    return withTrack.filter(p => p.status === 'Playing').sort(byRecency).at(0) ??
+        withTrack.sort(byRecency).at(0) ?? null;
 }
 
 /** "Title — Artist", or just the title. */

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 // islet-hook: a Claude Code command hook, run as `gjs -m bridge/hook.js` with the event JSON on
 // stdin. It forwards a few whitelisted fields to the daemon.
 //
@@ -26,5 +27,5 @@ try {
     // Islet is not running or the input was unexpected: nothing to report. Development tools
     // set ISLET_HOOK_DEBUG to see why; stderr is not shown to Claude for an exit code of 0.
     if (GLib.getenv('ISLET_HOOK_DEBUG'))
-        printerr(`islet-hook: ${error}`);
+        printerr(`islet-hook: ${String(error)}`);
 }

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import {formatTokens} from './format.js';
 import type {PlanUsage, UsageSnapshot} from './protocol.js';
 import {freshTokens} from './usage/claudeTranscript.js';

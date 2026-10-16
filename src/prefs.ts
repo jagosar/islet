@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 
@@ -13,12 +14,13 @@ function errorMessage(error: unknown): string {
 }
 
 export default class IsletPreferences extends ExtensionPreferences {
-    override async fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
+    override fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
         const page = new Adw.PreferencesPage({title: _('Islet'), icon_name: 'preferences-system-symbolic'});
         window.add(page);
         page.add(this.claudeGroup(window));
         page.add(this.keyboardGroup());
         page.add(this.aboutGroup());
+        return Promise.resolve();
     }
 
     private claudeGroup(window: Adw.PreferencesWindow): Adw.PreferencesGroup {

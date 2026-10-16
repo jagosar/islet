@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
@@ -59,7 +60,7 @@ export class DaemonClient {
                     this.proxy = Gio.DBusProxy.new_for_bus_finish(result);
                 } catch (error) {
                     if (!this.cancellable.is_cancelled())
-                        console.error(`Islet: could not create the D-Bus proxy: ${error}`);
+                        console.error(`Islet: could not create the D-Bus proxy: ${String(error)}`);
                     return;
                 }
                 this.proxy.connectObject(
@@ -87,7 +88,7 @@ export class DaemonClient {
                     proxy?.call_finish(result);
                 } catch (error) {
                     if (!this.cancellable.is_cancelled())
-                        console.warn(`Islet: could not reach the daemon: ${error}`);
+                        console.warn(`Islet: could not reach the daemon: ${String(error)}`);
                 }
             });
     }
