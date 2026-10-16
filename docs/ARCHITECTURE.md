@@ -80,6 +80,10 @@ Options evaluated:
 - **Lifecycle:** the extension starts the daemon with `Gio.Subprocess` in `enable()` and stops it
   in `disable()`. D-Bus name ownership guarantees a single instance. No systemd unit to install,
   nothing left behind on uninstall.
+- **Verified in spike S2** (nested Shell): disable stops the daemon; enable starts a new one; a
+  newer daemon takes the bus name (`ALLOW_REPLACEMENT | REPLACE`) and the old one exits; when the
+  Shell leaves the bus every daemon exits. Known gap: a daemon the extension did not start (e.g.
+  run by hand) survives `disable()` until the next `enable()` replaces it or the Shell exits.
 
 ### 3.3 Storage
 
@@ -130,6 +134,23 @@ work: no watchers, no timers, no processes.
 - Metrics as in the original: input, cache write, output, cache read; **fresh** = input + cache
   write + output; **processed** = fresh + cache read. Subagent (`isSidechain`) usage is included.
 - Unknown usage fields (e.g. `iterations`) are ignored and logged once, never guessed.
+- **Verified in spike S5** against the `cost-state.modelUsage` Claude Code writes when a
+  session ends:
+  - De-duplicated by `message.id` across all transcript files (a resumed session copies earlier
+    responses), the transcript totals match **exactly** for a session with only conversation
+    turns. A naive sum overcounts by up to 1.9×.
+  - They **undercount** sessions with auxiliary calls that are never written to the transcript:
+    the auto-mode permission classifier, the generated session title and the "away" summary.
+    Measured on one terminal session: fresh −1.3 %, cache reads −67 % (the classifier re-reads
+    the context), plus a model that never appears in the transcript.
+  - `output_tokens` already includes thinking tokens, so they are not added again. Responses
+    with model `<synthetic>` are local messages and are skipped. Days are local days (`Intl`,
+    works in GJS).
+- **Decision:** live totals come from transcripts. When a session's `cost-state` appears, its
+  totals replace the transcript totals for that session, with the difference booked on the
+  session's last day. The UI never calls a running session's figures exact, and leads with
+  fresh tokens, which the auxiliary calls barely affect. `scripts/usage-report.mjs` repeats the
+  comparison on any machine.
 - No API-equivalent cost in v1: on a subscription it is misleading and the price table is a
   maintenance burden.
 
@@ -139,9 +160,11 @@ work: no watchers, no timers, no processes.
   the first response of a session; either window may be absent.
 - `islet-statusline` forwards those numbers to the daemon and then runs the user's previous
   status line command (if any) and prints its output unchanged, so nothing visible changes.
-- **Unverified:** whether the VS Code extension and the desktop app run the status line. The
-  docs only describe the terminal. If they do not, the UI says "plan usage comes from terminal
-  sessions" and shows when the figure was last measured. *(spike)*
+- **Spike S4:** the desktop app does **not** run the status line; the terminal does, several
+  times per reply, and `rate_limits.five_hour` / `seven_day` appear from the first reply on (seen
+  on a Max/Pro login: 32 % and 4 %); VS Code is still to be checked. So plan usage only refreshes while a terminal session is active. The UI
+  must say "plan usage comes from terminal sessions" and show when the figure was last measured,
+  and the compact capsule should not lead with a stale percentage.
 - Never computed from token counts. Never read from the OAuth token or undocumented endpoints.
 
 **Claude Code — live agent activity** (the most useful feature)
@@ -152,7 +175,23 @@ work: no watchers, no timers, no processes.
   waiting), not only the last event.
 - `islet-hook` reads stdin, keeps a whitelist of fields (`session_id`, `cwd`, `hook_event_name`,
   notification type, `transcript_path`), calls the daemon over D-Bus with a 200 ms timeout,
-  prints nothing and **always exits 0**, so it can never block or alter Claude Code.
+  prints nothing and **always exits 0**, so it can never block or alter Claude Code. This
+  matters: a `Stop` hook that exits 2 keeps Claude from stopping.
+- **Verified in spike S3** with real payloads against the nested Shell: `Notification` and
+  `Stop` arrive as `AgentEvent`; `last_assistant_message` and `message` never leave the hook;
+  invalid input is dropped; with Islet down the hook still exits 0, silently, in ~60 ms.
+- **Real entry points (2026-10-16):**
+
+  | Entry point | Hooks (`Notification`, `Stop`) | Status line (plan usage) |
+  |---|---|---|
+  | Desktop app (`claude-desktop`) | ✓ both, after the stdin fix below | ✗ never runs |
+  | Terminal CLI (`cli`) | ✓ `SessionStart`, `Notification`, `Stop` | ✓ runs; `rate_limits` arrive after the first reply |
+  | VS Code (`claude-vscode`) | not yet verified | not yet verified |
+
+  **Bug found:** the desktop app passes hook input through a socket; opening `/dev/stdin` on a
+  socket fails with ENXIO, so every desktop event was dropped. The bridge reads fd 0 instead.
+  **Consequence for plan usage:** the status line is not a reliable source for people who work
+  in the desktop app; see §5.
 
 **Media**: MPRIS over D-Bus (any player: Spotify, browsers, Rhythmbox…). Title, artist, art,
 play/pause, previous/next, seek where supported. The playing player wins; a closed player clears.
@@ -215,11 +254,13 @@ restart; daily history (today and 7 days).
 
 ```
 islet/
-├── src/
+├── src/             compiles 1:1 into dist/, which is the extension directory
+│   ├── extension.ts, prefs.ts, metadata.json, stylesheet.css
 │   ├── core/        pure TypeScript: parsers, aggregation, state machine, settings merge
+│   ├── ui/          Shell widgets (capsule, expanded view)
 │   ├── daemon/      GJS: watchers, providers, D-Bus service
-│   ├── extension/   extension.ts, prefs.ts, ui/
 │   └── bridge/      islet-hook, islet-statusline
+├── scripts/         nested.sh: isolated nested Shell for manual testing
 ├── schemas/         org.gnome.shell.extensions.islet.gschema.xml
 ├── data/            D-Bus interface XML
 ├── po/              translations

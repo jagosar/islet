@@ -1,0 +1,26 @@
+.islet-pill {
+  height: 22px;
+  padding: 0 10px;
+  spacing: 6px;
+  border-radius: 11px;
+  background-color: rgba(255, 255, 255, 0.10);
+}
+
+.islet-pill:live {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.islet-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: #8fd18f;
+}
+
+.islet-pill:live .islet-dot {
+  background-color: #f5a623;
+}
+
+.islet-label {
+  font-feature-settings: "tnum";
+}

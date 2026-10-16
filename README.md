@@ -25,4 +25,4 @@ npm run nested     # build, then run the extension in an isolated nested GNOME S
 ```
 
 `npm run nested` never touches your real session: the nested Shell gets its own configuration,
-data and D-Bus session under `.devkit/`.
+data and D-Bus session under `$XDG_RUNTIME_DIR/islet-devkit/`.
