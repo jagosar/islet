@@ -14,15 +14,40 @@ Islet is an independent implementation for GNOME Shell on Wayland; it shares ide
 - GNOME Shell 50 on Wayland (developed on Ubuntu 26.04)
 - For development: Node.js 20 or later and `mutter-dev-bin` (nested Shell for testing)
 
+## Installing a build
+
+> Islet is a prototype. An extension runs inside GNOME Shell, and a serious bug can end your
+> session. Try it in a nested Shell first (`npm run nested:zip`, below).
+
+Download `islet-extension` from the latest successful
+[CI run](https://github.com/jagosar/islet/actions/workflows/ci.yml) (a zip inside a zip), or
+build it yourself with `npm run pack`. Then:
+
+```bash
+gnome-extensions install --force islet@jagosar.github.io.zip
+```
+
+Log out and back in (GNOME Shell on Wayland only picks up new extensions at login), then:
+
+```bash
+gnome-extensions enable islet@jagosar.github.io
+```
+
+To remove it: `gnome-extensions uninstall islet@jagosar.github.io`.
+
 ## Development
 
 ```bash
 npm install
-npm run build      # TypeScript -> dist/
-npm test           # unit tests for the pure core
+npm run build          # TypeScript -> dist/
+npm test               # unit tests for the pure core (Node)
+npm run test:gjs       # smoke test of the built core under GJS
 npm run lint
-npm run nested     # build, then run the extension in an isolated nested GNOME Shell
+npm run pack           # build islet@jagosar.github.io.zip
+npm run nested         # run dist/ in an isolated nested GNOME Shell
+npm run nested:zip     # pack, install the zip and run it in the nested Shell
+npm run install-local  # pack and install for your user (does not enable it)
 ```
 
-`npm run nested` never touches your real session: the nested Shell gets its own configuration,
-data and D-Bus session under `$XDG_RUNTIME_DIR/islet-devkit/`.
+The nested Shell never touches your real session: it gets its own configuration, data, cache
+and D-Bus session under `$XDG_RUNTIME_DIR/islet-devkit/`.

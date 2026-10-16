@@ -11,8 +11,10 @@
     "test": "vitest run",
     "test:gjs": "npm run build && gjs -m tests/gjs/smoke.js",
     "lint": "eslint .",
-    "pack": "npm run build && rm -f islet@jagosar.github.io.zip && cd dist && zip -qr ../islet@jagosar.github.io.zip .",
-    "nested": "npm run build && scripts/nested.sh"
+    "pack": "npm run build && scripts/pack.sh",
+    "nested": "npm run build && scripts/nested.sh",
+    "install-local": "npm run build && scripts/install-local.sh",
+    "nested:zip": "npm run build && scripts/nested.sh --zip"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
