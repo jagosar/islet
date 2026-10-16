@@ -1,4 +1,8 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "\"$CLAUDE_PROJECT_DIR\"/../../scripts/dev-statusline-probe.sh"
+  },
   "hooks": {
     "Notification": [
       {
