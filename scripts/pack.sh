@@ -17,5 +17,6 @@ if [ ${#schemas[@]} -gt 0 ]; then
 fi
 
 rm -f "$out"
-(cd "$root/dist" && zip -qr "$out" .)
+# dev/ holds development-only tools (see src/dev/) and never ships.
+(cd "$root/dist" && zip -qr "$out" . -x 'dev/*')
 echo "$out"

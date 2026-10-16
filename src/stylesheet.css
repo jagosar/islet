@@ -21,6 +21,14 @@
   background-color: #f5a623;
 }
 
+.islet-pill:unavailable .islet-dot {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.islet-pill:unavailable .islet-label {
+  color: rgba(255, 255, 255, 0.55);
+}
+
 .islet-label {
   font-feature-settings: "tnum";
 }

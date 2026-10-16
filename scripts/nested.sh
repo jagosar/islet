@@ -40,5 +40,5 @@ exec dbus-run-session -- bash -c '
     gsettings set org.gnome.shell disable-user-extensions false
     gsettings set org.gnome.shell enabled-extensions "[\"$1\"]"
     echo "$DBUS_SESSION_BUS_ADDRESS" > "$2/bus-address"
-    exec gnome-shell --devkit --wayland
+    ISLET_DEV_DEBUG=1 exec gnome-shell --devkit --wayland
 ' nested "$uuid" "$sandbox"
