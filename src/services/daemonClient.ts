@@ -1,63 +1,89 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {BUS_NAME, INTERFACE_NAME, OBJECT_PATH} from '../core/dbus.js';
+import {BUS_NAME, INTERFACE_NAME, INTERFACE_XML, OBJECT_PATH} from '../core/dbus.js';
+import {
+    decodePlanUsage, decodeSessions, decodeUsage,
+    type AgentSession, type PlanUsage, type UsageSnapshot,
+} from '../core/protocol.js';
 
 const SIGTERM = 15;
 const CALL_TIMEOUT_MS = 1000;
+const FIRST_RESTART_DELAY_S = 1;
+const MAX_RESTART_DELAY_S = 60;
+/** A daemon that ran this long before exiting resets the restart backoff. */
+const STABLE_RUN_S = 60;
+
+export interface DaemonState {
+    available: boolean;
+    usage: UsageSnapshot | null;
+    plan: PlanUsage | null;
+    sessions: AgentSession[];
+}
+
+export interface DaemonClientCallbacks {
+    onState(state: DaemonState): void;
+    onAgentEvent(fields: Record<string, string>): void;
+}
 
 /**
- * Starts the daemon as a child process and talks to it over the session bus. One instance per
- * enable(); stop() cancels everything it started, so it cannot be restarted.
+ * Runs the daemon as a child process and mirrors its D-Bus properties. One instance per
+ * enable(); stop() cancels everything it started.
+ *
+ * If the daemon exits while no other daemon owns the bus name, it is restarted with a growing
+ * delay (1 s up to 60 s). If another daemon owns the name (a newer one replaced it), nothing is
+ * restarted: the proxy simply follows the new owner.
  */
 export class DaemonClient {
-    private process: Gio.Subprocess | null = null;
     private readonly cancellable = new Gio.Cancellable();
-    private signalId = 0;
+    private proxy: Gio.DBusProxy | null = null;
+    private process: Gio.Subprocess | null = null;
+    private startedAt = 0;
+    private restartDelay = FIRST_RESTART_DELAY_S;
+    private restartId = 0;
+    private stopped = false;
 
     constructor(
         private readonly daemonPath: string,
-        private readonly onAgentEvent: (fields: Record<string, string>) => void,
+        private readonly callbacks: DaemonClientCallbacks,
     ) {}
 
     start(): void {
-        this.signalId = Gio.DBus.session.signal_subscribe(
-            BUS_NAME, INTERFACE_NAME, 'AgentEvent', OBJECT_PATH, null, Gio.DBusSignalFlags.NONE,
-            (_connection, _sender, _path, _iface, _signal, parameters) => {
-                const [fields] = parameters.deepUnpack() as [Record<string, string>];
-                this.onAgentEvent(fields);
+        const info = Gio.DBusNodeInfo.new_for_xml(INTERFACE_XML).lookup_interface(INTERFACE_NAME);
+        Gio.DBusProxy.new_for_bus(
+            Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, info,
+            BUS_NAME, OBJECT_PATH, INTERFACE_NAME, this.cancellable,
+            (_source, result) => {
+                try {
+                    this.proxy = Gio.DBusProxy.new_for_bus_finish(result);
+                } catch (error) {
+                    if (!this.cancellable.is_cancelled())
+                        console.error(`Islet: could not create the D-Bus proxy: ${error}`);
+                    return;
+                }
+                this.proxy.connectObject(
+                    'g-properties-changed', () => this.emitState(),
+                    'notify::g-name-owner', () => this.emitState(),
+                    'g-signal', (_proxy: Gio.DBusProxy, _sender: string, name: string, parameters: GLib.Variant) => {
+                        if (name === 'AgentEvent') {
+                            const [fields] = parameters.deepUnpack() as [Record<string, string>];
+                            this.callbacks.onAgentEvent(fields);
+                        }
+                    },
+                    this);
+                this.emitState();
             });
 
-        const gjs = GLib.find_program_in_path('gjs');
-        if (!gjs) {
-            console.error('Islet: gjs was not found in PATH, so the daemon cannot start');
-            return;
-        }
-
-        const process = Gio.Subprocess.new([gjs, '-m', this.daemonPath], Gio.SubprocessFlags.NONE);
-        this.process = process;
-        process.wait_async(this.cancellable, (_source, result) => {
-            try {
-                process.wait_finish(result);
-            } catch {
-                return; // Cancelled by stop().
-            }
-            if (this.process !== process)
-                return;
-            this.process = null;
-            const how = process.get_if_exited() ? `status ${process.get_exit_status()}` : 'a signal';
-            console.warn(`Islet: the daemon exited with ${how}`);
-        });
+        this.spawn();
     }
 
     reportAgentEvent(fields: Record<string, string>): void {
-        Gio.DBus.session.call(
-            BUS_NAME, OBJECT_PATH, INTERFACE_NAME, 'ReportAgentEvent',
-            new GLib.Variant('(a{ss})', [fields]), null,
+        this.proxy?.call(
+            'ReportAgentEvent', new GLib.Variant('(a{ss})', [fields]),
             Gio.DBusCallFlags.NO_AUTO_START, CALL_TIMEOUT_MS, this.cancellable,
-            (connection, result) => {
+            (proxy, result) => {
                 try {
-                    connection?.call_finish(result);
+                    proxy?.call_finish(result);
                 } catch (error) {
                     if (!this.cancellable.is_cancelled())
                         console.warn(`Islet: could not reach the daemon: ${error}`);
@@ -66,12 +92,72 @@ export class DaemonClient {
     }
 
     stop(): void {
+        this.stopped = true;
         this.cancellable.cancel();
-        if (this.signalId) {
-            Gio.DBus.session.signal_unsubscribe(this.signalId);
-            this.signalId = 0;
+        if (this.restartId) {
+            GLib.source_remove(this.restartId);
+            this.restartId = 0;
         }
+        this.proxy?.disconnectObject(this);
+        this.proxy = null;
         this.process?.send_signal(SIGTERM);
         this.process = null;
+    }
+
+    private spawn(): void {
+        const gjs = GLib.find_program_in_path('gjs');
+        if (!gjs) {
+            console.error('Islet: gjs was not found in PATH, so the daemon cannot start');
+            return;
+        }
+
+        const process = Gio.Subprocess.new([gjs, '-m', this.daemonPath], Gio.SubprocessFlags.NONE);
+        this.process = process;
+        this.startedAt = GLib.get_monotonic_time();
+        process.wait_async(this.cancellable, (_source, result) => {
+            try {
+                process.wait_finish(result);
+            } catch {
+                return; // Cancelled by stop().
+            }
+            if (this.process === process)
+                this.onExit(process);
+        });
+    }
+
+    private onExit(process: Gio.Subprocess): void {
+        this.process = null;
+        const how = process.get_if_exited() ? `status ${process.get_exit_status()}` : 'a signal';
+
+        const ranFor = (GLib.get_monotonic_time() - this.startedAt) / 1_000_000;
+        if (ranFor >= STABLE_RUN_S)
+            this.restartDelay = FIRST_RESTART_DELAY_S;
+
+        // Decide when the delay is over, not now: at exit time the proxy may not have seen the
+        // bus name released yet, and a daemon that replaced this one would still own it then.
+        this.restartId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, this.restartDelay, () => {
+            this.restartId = 0;
+            if (this.stopped)
+                return GLib.SOURCE_REMOVE;
+            if (this.proxy?.g_name_owner) {
+                console.log(`Islet: the daemon exited with ${how}; another daemon serves Islet`);
+            } else {
+                console.warn(`Islet: the daemon exited with ${how}; restarting it`);
+                this.spawn();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+        this.restartDelay = Math.min(this.restartDelay * 2, MAX_RESTART_DELAY_S);
+    }
+
+    private emitState(): void {
+        const read = (name: string): string => (this.proxy?.get_cached_property(name)?.unpack() as string | undefined) ?? '';
+        const available = Boolean(this.proxy?.g_name_owner);
+        this.callbacks.onState({
+            available,
+            usage: available ? decodeUsage(read('Usage')) : null,
+            plan: available ? decodePlanUsage(read('PlanUsage')) : null,
+            sessions: available ? decodeSessions(read('Sessions')) ?? [] : [],
+        });
     }
 }

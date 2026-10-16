@@ -92,6 +92,32 @@ JSON under `$XDG_STATE_HOME/islet/` (written atomically: temp file + rename). 26
 totals are a few KB, so SQLite (no binding guaranteed in GJS) is not needed. Settings live in
 GSettings (`org.gnome.shell.extensions.islet`), edited in a libadwaita preferences window.
 
+### 3.4 D-Bus API v1 (`io.github.jagosar.Islet1`)
+
+| Member | Kind | Content |
+|---|---|---|
+| `Usage` | property `s` | `UsageSnapshot`: today's tokens per model, fresh tokens per day |
+| `PlanUsage` | property `s` | `PlanUsage`: 5 h / 7 d windows and `measuredAt`, or `null` |
+| `Sessions` | property `s` | `AgentSession[]`: current Claude Code sessions |
+| `ReportAgentEvent(a{ss})` | method | from the hook bridge |
+| `ReportPlanUsage(a{sd})` | method | from the status line bridge |
+| `AgentEvent(a{ss})` | signal | re-emitted agent events, for live activities |
+
+- **Properties are versioned JSON documents** (`{"version": 1, …}`), defined and validated in
+  `src/core/protocol.ts`. Nested D-Bus structures are awkward in GJS and cannot be tested without
+  a bus; JSON validated by the pure core is identical on both sides and unit tested. A document
+  that does not validate (or has another version) reads as "no data", never as an error.
+- Methods take flat dictionaries so the bridges stay trivial; every argument is validated and
+  size-limited (the session bus is shared by all of the user's processes).
+- Changes go out as `PropertiesChanged`. The extension mirrors them through a `GDBusProxy`, which
+  also follows the bus name to a new owner after a daemon restart.
+- Plan usage is persisted in `$XDG_STATE_HOME/islet/plan-usage.json`, so a restarted daemon
+  still knows it.
+- **Daemon restarts:** when the daemon exits and no other daemon owns the name, the extension
+  restarts it after 1 s, doubling up to 60 s; a daemon that ran for a minute resets the delay.
+  The capsule greys out while the daemon is unavailable.
+- Media and focus methods are added with their modules (#10, #11).
+
 ## 4. Placement
 
 - **Next to the clock**, in the top bar's center box, **primary monitor only** (where GNOME puts

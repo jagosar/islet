@@ -8,14 +8,12 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import {formatTokens} from '../core/format.js';
-
 const MORPH_MS = 250;
 const LIVE_ACTIVITY_MS = 4000;
 
 /**
- * The island in the top bar. Spike S1: static demo content, a width morph between the compact
- * state and a live activity, and a placeholder for the expanded view.
+ * The island in the top bar: a compact text, temporary live activities that grow the capsule,
+ * and an "unavailable" look while the daemon is not running.
  */
 export class Capsule extends PanelMenu.Button {
     static {
@@ -26,6 +24,7 @@ export class Capsule extends PanelMenu.Button {
     private readonly label: St.Label;
     private mirror: Clutter.Actor | null = null;
     private liveTimeoutId = 0;
+    private compact = 'Claude';
 
     /** `onSimulate` is a spike hook: the menu item sends a fake agent event through the daemon. */
     constructor(onSimulate: () => void) {
@@ -42,7 +41,7 @@ export class Capsule extends PanelMenu.Button {
         this.label = new St.Label({
             style_class: 'islet-label',
             y_align: Clutter.ActorAlign.CENTER,
-            text: this.compactText(),
+            text: this.compact,
         });
         this.label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this.pill.add_child(this.label);
@@ -64,6 +63,39 @@ export class Capsule extends PanelMenu.Button {
         }, this);
     }
 
+    /** The text shown while no live activity runs. */
+    get compactText(): string {
+        return this.compact;
+    }
+
+    /** The text on screen right now. */
+    get shownText(): string {
+        return this.label.text;
+    }
+
+    get isLive(): boolean {
+        return this.liveTimeoutId !== 0;
+    }
+
+    get isAvailable(): boolean {
+        return !this.pill.has_style_pseudo_class('unavailable');
+    }
+
+    setCompactText(text: string): void {
+        if (text === this.compact)
+            return;
+        this.compact = text;
+        if (!this.isLive)
+            this.morphTo(text);
+    }
+
+    setAvailable(available: boolean): void {
+        if (available)
+            this.pill.remove_style_pseudo_class('unavailable');
+        else
+            this.pill.add_style_pseudo_class('unavailable');
+    }
+
     /**
      * Keeps `actor` exactly as wide as the capsule, so a spacer on the clock's other side keeps
      * the clock centred while the capsule grows and shrinks.
@@ -80,7 +112,7 @@ export class Capsule extends PanelMenu.Button {
         this.liveTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LIVE_ACTIVITY_MS, () => {
             this.liveTimeoutId = 0;
             this.pill.remove_style_pseudo_class('live');
-            this.morphTo(this.compactText());
+            this.morphTo(this.compact);
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -89,10 +121,6 @@ export class Capsule extends PanelMenu.Button {
         this.clearLiveTimeout();
         this.mirror = null;
         super.destroy();
-    }
-
-    private compactText(): string {
-        return `Claude ${formatTokens(1_120_000)} · 72%`;
     }
 
     private targetWidth(): number {

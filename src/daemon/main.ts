@@ -10,30 +10,18 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {parseAgentEvent} from '../core/agentEvents.js';
-import {BUS_NAME, INTERFACE_XML, OBJECT_PATH} from '../core/dbus.js';
+import {BUS_NAME} from '../core/dbus.js';
+import {IsletService} from './service.js';
+import {StateStore} from './stateStore.js';
 
 const loop = new GLib.MainLoop(null, false);
-let exported: Gio.DBusExportedObject | null = null;
-
-const service = {
-    ReportAgentEvent(fields: Record<string, string>): void {
-        if (!parseAgentEvent(fields)) {
-            console.warn('islet-daemon: ignored an invalid agent event');
-            return;
-        }
-        exported?.emit_signal('AgentEvent', new GLib.Variant('(a{ss})', [fields]));
-    },
-};
+const service = new IsletService(new StateStore());
 
 Gio.bus_own_name(
     Gio.BusType.SESSION,
     BUS_NAME,
     Gio.BusNameOwnerFlags.ALLOW_REPLACEMENT | Gio.BusNameOwnerFlags.REPLACE,
-    connection => {
-        exported = Gio.DBusExportedObject.wrapJSObject(INTERFACE_XML, service);
-        exported.export(connection, OBJECT_PATH);
-    },
+    connection => service.export(connection),
     null,
     () => {
         console.log('islet-daemon: bus name lost, exiting');
