@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Installs the packed extension for the current user. It does not enable it: on Wayland,
 # GNOME Shell only picks up a new extension after you log out and back in.
 set -euo pipefail

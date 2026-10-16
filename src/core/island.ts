@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /**
  * What the capsule shows: the compact view chosen from the current state, and the queue of
  * temporary live activities. Pure, so every rule is unit tested.

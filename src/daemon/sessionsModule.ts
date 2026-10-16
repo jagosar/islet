@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import GLib from 'gi://GLib';
 
 import {parseAgentEvent} from '../core/agentEvents.js';

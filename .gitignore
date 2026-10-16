@@ -3,3 +3,4 @@ dist/
 *.zip
 coverage/
 dev/hook-playground/*.txt
+*.tar.gz

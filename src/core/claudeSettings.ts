@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /**
  * Connecting Islet to Claude Code by editing its settings.json: hooks for agent events and the
  * status line for plan usage. Pure, so every rule is unit tested; the callers read and write

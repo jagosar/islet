@@ -1,9 +1,9 @@
 {
   "name": "islet",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "A small dynamic island for the GNOME top bar",
-  "license": "UNLICENSED",
+  "license": "GPL-2.0-or-later",
   "type": "module",
   "scripts": {
     "build": "rm -rf dist && tsc && cp src/metadata.json src/stylesheet.css dist/ && mkdir -p dist/schemas && cp schemas/*.gschema.xml dist/schemas/ && glib-compile-schemas --strict dist/schemas",
@@ -14,7 +14,8 @@
     "pack": "npm run build && scripts/pack.sh",
     "nested": "npm run build && scripts/nested.sh",
     "install-local": "npm run build && scripts/install-local.sh",
-    "nested:zip": "npm run build && scripts/nested.sh --zip"
+    "nested:zip": "npm run build && scripts/nested.sh --zip",
+    "release": "npm run build && scripts/release.sh"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

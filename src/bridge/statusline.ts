@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // islet-statusline: a Claude Code status line command, run as
 // `gjs -m bridge/statusline.js [PREVIOUS]` with the session JSON on stdin.
 //

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // islet-hook: a Claude Code command hook, run as `gjs -m bridge/hook.js` with the event JSON on
 // stdin. It forwards a few whitelisted fields to the daemon.
 //

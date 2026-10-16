@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Builds the installable extension zip from dist/ (run `npm run build` first; `npm run pack`
 # does both). The build already compiled the GSettings schemas into dist/schemas.
 set -euo pipefail

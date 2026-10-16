@@ -7,5 +7,6 @@
   ],
   "url": "https://github.com/jagosar/islet",
   "gettext-domain": "islet",
-  "settings-schema": "org.gnome.shell.extensions.islet"
+  "settings-schema": "org.gnome.shell.extensions.islet",
+  "version-name": "0.1.0"
 }

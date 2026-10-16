@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // Development only. Loaded by the extension when ISLET_DEV_DEBUG is set (scripts/nested.sh does
 // this) and left out of the packaged extension by scripts/pack.sh. It lets scripts inspect the
 // capsule and take screenshots of the nested Shell, which has no other way in from outside.

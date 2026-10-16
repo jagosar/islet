@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /**
  * The documents behind the D-Bus properties of io.github.jagosar.Islet1.
  *

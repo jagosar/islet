@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /** Now playing, from MPRIS players. Pure: the Shell side feeds it unpacked D-Bus properties. */
 
 export type PlaybackStatus = 'Playing' | 'Paused' | 'Stopped';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /**
  * The focus timer. Pure and clock-free: every operation takes `now` (Unix epoch seconds), so a
  * timer survives restarts by being stored and read back, and a session that ended while the

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Development only: talks to the nested Shell started by `npm run nested`.
 #
 #   scripts/dev-debug.sh state                 capsule state as JSON
