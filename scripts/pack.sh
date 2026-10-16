@@ -8,7 +8,15 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 uuid="$(node -p "JSON.parse(require('fs').readFileSync('$root/dist/metadata.json', 'utf8')).uuid")"
 out="$root/$uuid.zip"
 
+# The package is built from a copy of dist/ without the development-only code: the dev/ folder
+# (see src/dev/) and the regions marked DEV-ONLY in the sources (test hooks switched on by
+# environment variables), which scripts/strip-dev.mjs removes.
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+cp -r "$root/dist/." "$stage/"
+rm -rf "${stage:?}/dev"
+find "$stage" -name '*.js' -print0 | xargs -0 node "$root/scripts/strip-dev.mjs"
+
 rm -f "$out"
-# dev/ holds development-only tools (see src/dev/) and never ships.
-(cd "$root/dist" && zip -qr "$out" . -x 'dev/*')
+(cd "$stage" && zip -qr "$out" .)
 echo "$out"

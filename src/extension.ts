@@ -57,7 +57,9 @@ export default class IsletExtension extends Extension {
     private enabledAt = 0;
     private live = new LiveQueue();
     private sources = new Map<string, number>();
+    // DEV-ONLY-BEGIN (left out of the packaged extension by scripts/pack.sh)
     private debug: {stop(): void} | null = null;
+    // DEV-ONLY-END
 
     enable(): void {
         try {
@@ -133,13 +135,17 @@ export default class IsletExtension extends Extension {
         this.mpris.start();
         this.focus.load();
         this.render();
+        // DEV-ONLY-BEGIN
         this.startDevDebug();
+        // DEV-ONLY-END
     }
 
     disable(): void {
         Main.wm.removeKeybinding(TOGGLE_KEY);
+        // DEV-ONLY-BEGIN
         this.debug?.stop();
         this.debug = null;
+        // DEV-ONLY-END
         for (const id of this.sources.values())
             GLib.source_remove(id);
         this.sources.clear();
@@ -164,6 +170,27 @@ export default class IsletExtension extends Extension {
         this.spacer?.destroy();
         this.spacer = null;
     }
+
+    // DEV-ONLY-BEGIN
+    /**
+     * Development only: scripts/nested.sh sets ISLET_DEV_DEBUG, and dev/ is left out of the
+     * packaged extension, so release installs never load this.
+     */
+    private startDevDebug(): void {
+        if (!GLib.getenv('ISLET_DEV_DEBUG') || !GLib.file_test(`${this.path}/dev/debugService.js`, GLib.FileTest.EXISTS))
+            return;
+        // Fault injection for the end-to-end test of enable()'s rollback; like the debug service,
+        // it exists only where dev/ was not stripped (never in the package).
+        if (GLib.getenv('ISLET_DEV_FAIL_ENABLE'))
+            throw new Error('ISLET_DEV_FAIL_ENABLE: simulated failure at the end of enable()');
+        import('./dev/debugService.js')
+            .then(({DebugService}) => {
+                if (this.capsule && this.expanded)
+                    this.debug = new DebugService(this.capsule, this.expanded);
+            })
+            .catch((error: unknown) => console.warn(`Islet: debug service unavailable: ${String(error)}`));
+    }
+    // DEV-ONLY-END
 
     private onState(state: DaemonState): void {
         const crossed = this.state?.available ? planThresholdCrossed(this.state.plan, state.plan) : null;
@@ -271,24 +298,5 @@ export default class IsletExtension extends Extension {
             callback();
             return GLib.SOURCE_REMOVE;
         }));
-    }
-
-    /**
-     * Development only: scripts/nested.sh sets ISLET_DEV_DEBUG, and dev/ is left out of the
-     * packaged extension, so release installs never load this.
-     */
-    private startDevDebug(): void {
-        if (!GLib.getenv('ISLET_DEV_DEBUG') || !GLib.file_test(`${this.path}/dev/debugService.js`, GLib.FileTest.EXISTS))
-            return;
-        // Fault injection for the end-to-end test of enable()'s rollback; like the debug service,
-        // it exists only where dev/ was not stripped (never in the package).
-        if (GLib.getenv('ISLET_DEV_FAIL_ENABLE'))
-            throw new Error('ISLET_DEV_FAIL_ENABLE: simulated failure at the end of enable()');
-        import('./dev/debugService.js')
-            .then(({DebugService}) => {
-                if (this.capsule && this.expanded)
-                    this.debug = new DebugService(this.capsule, this.expanded);
-            })
-            .catch((error: unknown) => console.warn(`Islet: debug service unavailable: ${String(error)}`));
     }
 }

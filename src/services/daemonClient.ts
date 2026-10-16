@@ -156,9 +156,8 @@ export class DaemonClient {
             this.restartId = 0;
             if (this.stopped)
                 return GLib.SOURCE_REMOVE;
-            if (this.proxy?.g_name_owner) {
-                console.log(`Islet: the daemon ${reason}; another daemon serves Islet`);
-            } else {
+            // If another daemon owns the name, it serves Islet: nothing to start, nothing to log.
+            if (!this.proxy?.g_name_owner) {
                 console.warn(`Islet: the daemon ${reason}; starting it`);
                 this.spawn();
             }

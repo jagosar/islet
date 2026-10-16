@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import {execFileSync} from 'node:child_process';
-import {readdirSync, readFileSync, statSync} from 'node:fs';
+import {existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {dirname, join, relative, resolve} from 'node:path';
 import {beforeAll, describe, expect, it} from 'vitest';
 import {DIST, REPO} from '../integration/harness.js';
@@ -57,6 +58,58 @@ describe('the extension package', () => {
             }
         }
         expect(missing).toEqual([]);
+    });
+
+    it('has no development hooks: no environment switches, no debug service, no markers', () => {
+        const offenders: string[] = [];
+        const scratch = mkdtempSync(join(tmpdir(), 'islet-zip-'));
+        try {
+            execFileSync('unzip', ['-q', ZIP, '-d', scratch]);
+            for (const file of walk(scratch)) {
+                if (file.endsWith('.js') && /ISLET_DEV|debugService|DEV-ONLY|startDevDebug|ISLET_NESTED/.test(readFileSync(file, 'utf8')))
+                    offenders.push(relative(scratch, file));
+            }
+        } finally {
+            rmSync(scratch, {recursive: true, force: true});
+        }
+        expect(offenders).toEqual([]);
+    });
+
+    it('is syntactically valid JavaScript after the development code was stripped', () => {
+        const scratch = mkdtempSync(join(tmpdir(), 'islet-syntax-'));
+        try {
+            execFileSync('unzip', ['-q', ZIP, '-d', scratch]);
+            for (const file of walk(scratch).filter(f => f.endsWith('.js'))) {
+                const copy = `${file}.mjs`; // Node checks .mjs as an ES module.
+                writeFileSync(copy, readFileSync(file));
+                expect(() => execFileSync('node', ['--check', copy], {stdio: 'pipe'}), relative(scratch, file)).not.toThrow();
+            }
+        } finally {
+            rmSync(scratch, {recursive: true, force: true});
+        }
+    });
+
+    it('follows the extensions.gnome.org import rules: no Gtk/Gdk/Adw in the Shell, no Clutter/Meta/St/Shell in prefs', () => {
+        const libraries = (entry: string): Set<string> => {
+            const found = new Set<string>();
+            const queue = [join(DIST, entry)];
+            const seen = new Set<string>();
+            while (queue.length > 0) {
+                const file = queue.pop()!;
+                if (seen.has(file) || !existsSync(file))
+                    continue;
+                seen.add(file);
+                for (const match of readFileSync(file, 'utf8').matchAll(/(?:from\s+|import\s*\()\s*['"]([^'"]+)['"]/g)) {
+                    if (match[1].startsWith('gi://'))
+                        found.add(match[1].slice(5));
+                    else if (match[1].startsWith('.'))
+                        queue.push(resolve(dirname(file), match[1]));
+                }
+            }
+            return found;
+        };
+        expect([...libraries('extension.js')].filter(name => ['Gtk', 'Gdk', 'Adw'].includes(name))).toEqual([]);
+        expect([...libraries('prefs.js')].filter(name => ['Clutter', 'Meta', 'St', 'Shell'].includes(name))).toEqual([]);
     });
 
     it('has valid metadata that matches the package and the schema', () => {
