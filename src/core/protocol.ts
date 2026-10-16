@@ -34,7 +34,7 @@ export interface UsageSnapshot {
     history: {day: string; fresh: number}[];
 }
 
-export type SessionState = 'working' | 'needs-permission' | 'waiting' | 'finished';
+export type SessionState = 'working' | 'needs-permission' | 'waiting' | 'finished' | 'idle';
 
 export interface AgentSession {
     sessionId: string;
@@ -161,7 +161,7 @@ export function decodeUsage(text: string): UsageSnapshot | null {
     return {today, history};
 }
 
-const SESSION_STATES: readonly SessionState[] = ['working', 'needs-permission', 'waiting', 'finished'];
+const SESSION_STATES: readonly SessionState[] = ['working', 'needs-permission', 'waiting', 'finished', 'idle'];
 
 export function encodeSessions(sessions: AgentSession[]): string {
     return encode({sessions});
