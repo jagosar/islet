@@ -14,7 +14,21 @@ uuid="$(node -p "JSON.parse(require('fs').readFileSync('$root/dist/metadata.json
 sandbox="${XDG_RUNTIME_DIR:-/tmp}/islet-devkit"
 
 mkdir -p "$sandbox/config" "$sandbox/cache" "$sandbox/state" "$sandbox/data/gnome-shell/extensions"
-ln -sfn "$root/dist" "$sandbox/data/gnome-shell/extensions/$uuid"
+extension_dir="$sandbox/data/gnome-shell/extensions/$uuid"
+rm -rf "$extension_dir"
+
+# By default the sandbox links to dist/ for quick iteration. With --zip, the packed extension
+# is installed instead, exactly as a user would install a release.
+if [ "${1:-}" = "--zip" ]; then
+    zip="$("$root/scripts/pack.sh")"
+    # Without the real session's bus address, so the install cannot touch the real Shell.
+    # gnome-extensions extracts into XDG_CACHE_HOME and then moves the folder, which fails
+    # across filesystems, so the cache must be in the sandbox too.
+    env -u DBUS_SESSION_BUS_ADDRESS XDG_DATA_HOME="$sandbox/data" XDG_CACHE_HOME="$sandbox/cache" \
+        gnome-extensions install --force "$zip"
+else
+    ln -s "$root/dist" "$extension_dir"
+fi
 
 export XDG_CONFIG_HOME="$sandbox/config"
 export XDG_DATA_HOME="$sandbox/data"
