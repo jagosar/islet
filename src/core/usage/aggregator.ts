@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import {daysBefore} from '../days.js';
 import type {TokenCounts, UsageRecord} from './claudeTranscript.js';
 
 export type ModelTotals = Map<string, TokenCounts>;
@@ -58,7 +59,10 @@ interface SessionTotals {
  * that session, booking the difference on the session's last day.
  */
 export class UsageAggregator {
-    private readonly seen = new Set<string>();
+    /** Message id -> its session, so that the ids of forgotten sessions can be forgotten too. */
+    private readonly seen = new Map<string, string>();
+    /** Sessions whose last response is before this day were forgotten (set by prune()). */
+    private cutoff = '';
     private readonly days = new Map<string, ModelTotals>();
     private readonly sessions = new Map<string, SessionTotals>();
     private readonly references = new Map<string, ModelTotals>();
@@ -69,9 +73,14 @@ export class UsageAggregator {
     add(record: UsageRecord): boolean {
         if (this.seen.has(record.messageId))
             return false;
-        this.seen.add(record.messageId);
-
         const day = dayKey(record.timestamp, this.timeZone);
+        // An old response of a session that was forgotten: its file was rewritten and is read
+        // again from the start. (Old responses of a session that is still tracked are kept, so
+        // that its totals stay comparable with the cost-state Claude Code writes for all of it.)
+        if (day < this.cutoff && !this.sessions.has(record.sessionId))
+            return false;
+        this.seen.set(record.messageId, record.sessionId);
+
         let models = this.days.get(day);
         if (!models) {
             models = new Map();
@@ -88,6 +97,33 @@ export class UsageAggregator {
         if (day > session.lastDay)
             session.lastDay = day;
         return true;
+    }
+
+    /**
+     * Forgets what is older than `keepDays` days before `today`: the days, and the sessions whose
+     * last response is that old, with their response ids and references. Without it the daemon,
+     * which runs for weeks, would keep every response id it ever read.
+     */
+    prune(today: string, keepDays: number): void {
+        this.cutoff = daysBefore(today, keepDays);
+        for (const day of this.days.keys()) {
+            if (day < this.cutoff)
+                this.days.delete(day);
+        }
+        const forgotten = new Set<string>();
+        for (const [id, session] of this.sessions) {
+            if (session.lastDay < this.cutoff) {
+                forgotten.add(id);
+                this.sessions.delete(id);
+                this.references.delete(id);
+            }
+        }
+        if (forgotten.size > 0) {
+            for (const [messageId, sessionId] of this.seen) {
+                if (forgotten.has(sessionId))
+                    this.seen.delete(messageId);
+            }
+        }
     }
 
     /** Claude Code's own totals for an ended session (its `cost-state`). */

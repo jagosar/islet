@@ -93,6 +93,52 @@ describe('UsageAggregator', () => {
     });
 });
 
+describe('UsageAggregator memory bounds', () => {
+    const old = (id: string, timestamp: string, session = 's-old') => record(id, {timestamp, sessionId: session});
+
+    it('forgets what is older than the horizon, and refuses to re-add it', () => {
+        const aggregator = new UsageAggregator('UTC');
+        aggregator.add(old('ancient', '2025-01-01T10:00:00Z'));
+        aggregator.add(old('recent', '2026-10-10T10:00:00Z', 's-new'));
+        expect(aggregator.size).toBe(2);
+
+        aggregator.prune('2026-10-16', 189);
+        expect(aggregator.size).toBe(1);
+        expect([...aggregator.byDay().keys()]).toEqual(['2026-10-10']);
+        expect([...aggregator.bySession().keys()]).toEqual(['s-new']);
+
+        expect(aggregator.add(old('ancient', '2025-01-01T10:00:00Z'))).toBe(false); // A rewritten file is read again.
+        expect(aggregator.size).toBe(1);
+    });
+
+    it('drops the references of pruned sessions', () => {
+        const aggregator = new UsageAggregator('UTC');
+        aggregator.add(old('a', '2025-01-01T10:00:00Z'));
+        aggregator.setSessionReference('s-old', new Map([['claude-haiku-5-5', {input: 1, cacheWrite: 1, cacheRead: 1, output: 1}]]));
+        aggregator.prune('2026-10-16', 189);
+        expect(aggregator.byDay().size).toBe(0);
+    });
+
+    it('keeps a session that still has recent responses, whole, so it stays comparable with its cost-state', () => {
+        const aggregator = new UsageAggregator('UTC');
+        aggregator.add(old('a', '2025-01-01T10:00:00Z', 'long-lived'));
+        aggregator.add(old('b', '2026-10-15T10:00:00Z', 'long-lived'));
+        aggregator.prune('2026-10-16', 189);
+        expect(aggregator.bySession().get('long-lived')?.get('claude-haiku-5-5')?.output).toBe(2000);
+        expect(aggregator.size).toBe(2);
+        expect(aggregator.add(old('a', '2025-01-01T10:00:00Z', 'long-lived'))).toBe(false); // Still de-duplicated.
+    });
+
+    it('counts the same history before and after pruning, inside the horizon', () => {
+        const aggregator = new UsageAggregator('UTC');
+        for (let i = 0; i < 50; i++)
+            aggregator.add(old(`m${i}`, `2026-09-${String((i % 28) + 1).padStart(2, '0')}T10:00:00Z`, `s${i % 5}`));
+        const before = JSON.stringify([...aggregator.byDay()].sort());
+        aggregator.prune('2026-10-16', 189);
+        expect(JSON.stringify([...aggregator.byDay()].sort())).toBe(before);
+    });
+});
+
 describe('dayKey', () => {
     it.each([
         ['2026-10-16T10:00:00Z', 'Europe/Berlin', '2026-10-16'],

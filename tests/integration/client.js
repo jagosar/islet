@@ -4,6 +4,9 @@
 //   gjs -m client.js get PROPERTY              prints the property's JSON text
 //   gjs -m client.js call METHOD JSON_ARGS     calls a method (a{ss} or a{sd}, from a JSON object)
 //   gjs -m client.js watch SECONDS             prints every AgentEvent signal as one JSON line
+//   gjs -m client.js watch-properties SECONDS  prints the name of every changed property
+//   gjs -m client.js flood-events N            sends N agent events, each from a new session
+//   gjs -m client.js flood-plan N JSON_FIELDS  reports the same plan usage N times
 //   gjs -m client.js ping                      exits 0 once the daemon owns its bus name
 //
 // Exit codes: 0 ok, 1 error (message on stderr).
@@ -55,8 +58,39 @@ try {
         loop.run();
         break;
     }
+    case 'watch-properties': {
+        const loop = new GLib.MainLoop(null, false);
+        bus.signal_subscribe(NAME, 'org.freedesktop.DBus.Properties', 'PropertiesChanged', PATH, null, Gio.DBusSignalFlags.NONE,
+            (_c, _s, _p, _i, _n, parameters) => {
+                for (const name of Object.keys(parameters.deepUnpack()[1]))
+                    print(name);
+            });
+        print('ready');
+        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, Number(args[0] ?? 5), () => {
+            loop.quit();
+            return GLib.SOURCE_REMOVE;
+        });
+        loop.run();
+        break;
+    }
+    case 'flood-events': {
+        const count = Number(args[0]);
+        for (let i = 0; i < count; i++) {
+            bus.call_sync(NAME, PATH, IFACE, 'ReportAgentEvent',
+                new GLib.Variant('(a{ss})', [{session_id: `flood-${i}`, cwd: '/home/me/code/flood', hook_event_name: 'UserPromptSubmit'}]),
+                null, Gio.DBusCallFlags.NONE, 5000, null);
+        }
+        break;
+    }
+    case 'flood-plan': {
+        const fields = JSON.parse(args[1]);
+        for (let i = 0; i < Number(args[0]); i++) {
+            bus.call_sync(NAME, PATH, IFACE, 'ReportPlanUsage', new GLib.Variant('(a{sd})', [fields]), null, Gio.DBusCallFlags.NONE, 5000, null);
+        }
+        break;
+    }
     default:
-        fail('usage: client.js get|call|watch|ping');
+        fail('usage: client.js get|call|watch|watch-properties|flood-events|flood-plan|ping');
     }
 } catch (error) {
     fail(String(error));

@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    completeIfDue, decodeFocusState, formatCountdown, initialFocusState, pause, pruneHistory, remainingSeconds, resume, start, stop,
+    lastDays, completeIfDue, decodeFocusState, formatCountdown, initialFocusState, pause, pruneHistory, remainingSeconds, resume, start, stop,
 } from '../../src/core/focus.js';
 
 const day = '2026-10-16';
@@ -60,6 +60,27 @@ describe('focus timer', () => {
     it('prunes old days', () => {
         const state = {...initialFocusState(), history: {'2026-10-01': {minutes: 5, sessions: 1}, [day]: {minutes: 9, sessions: 0}}};
         expect(Object.keys(pruneHistory(state, [day]).history)).toEqual([day]);
+    });
+});
+
+describe('lastDays', () => {
+    it('lists today and the days before it, newest first, by calendar', () => {
+        expect(lastDays('2026-10-16', 7)).toEqual(['2026-10-16', '2026-10-15', '2026-10-14', '2026-10-13', '2026-10-12', '2026-10-11', '2026-10-10']);
+    });
+
+    it('crosses months, years and leap days', () => {
+        expect(lastDays('2026-03-02', 4)).toEqual(['2026-03-02', '2026-03-01', '2026-02-28', '2026-02-27']);
+        expect(lastDays('2028-03-01', 3)).toEqual(['2028-03-01', '2028-02-29', '2028-02-28']);
+        expect(lastDays('2026-01-01', 2)).toEqual(['2026-01-01', '2025-12-31']);
+    });
+
+    it('never skips or repeats a day around a time change (regression: 24 h subtraction skipped Mar 29)', () => {
+        for (const today of ['2026-03-30', '2026-03-29', '2026-10-26', '2026-10-25', '2026-11-02']) {
+            const days = lastDays(today, 7);
+            expect(new Set(days).size).toBe(7);
+            for (let i = 1; i < days.length; i++)
+                expect(Date.parse(`${days[i - 1]}T00:00:00Z`) - Date.parse(`${days[i]}T00:00:00Z`), today).toBe(86_400_000);
+        }
     });
 });
 

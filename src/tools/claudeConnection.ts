@@ -3,7 +3,7 @@
 // islet-claude: connects Islet to Claude Code, or disconnects it, from the command line.
 // Used by the uninstaller so Claude Code is left exactly as it was.
 //
-//   gjs -m tools/claudeConnection.js status|connect|disconnect
+//   gjs -m tools/claudeConnection.js status|connect|repair|disconnect
 //
 // Exit codes: 0 done, 1 settings.json could not be changed (message on stderr), 2 usage.
 
@@ -19,20 +19,24 @@ const command = System.programArgs[0];
 try {
     switch (command) {
     case 'status': {
-        const {hooks, statusLine} = connection.status();
-        print(`${connection.path}: hooks ${hooks ? 'connected' : 'not connected'}, status line ${statusLine ? 'connected' : 'not connected'}`);
+        const {hooks, statusLine, stale} = connection.status();
+        print(`${connection.path}: hooks ${hooks ? 'connected' : 'not connected'}, status line ${statusLine ? 'connected' : 'not connected'}${stale ? ' (needs repair: run "repair")' : ''}`);
         break;
     }
     case 'connect':
         connection.connect();
         print(`Connected Islet to Claude Code (${connection.path}).`);
         break;
+    case 'repair':
+        connection.repair();
+        print(`Repaired the Islet connection to Claude Code (${connection.path}).`);
+        break;
     case 'disconnect':
         connection.disconnect();
         print(`Disconnected Islet from Claude Code (${connection.path}).`);
         break;
     default:
-        printerr('Usage: gjs -m tools/claudeConnection.js status|connect|disconnect');
+        printerr('Usage: gjs -m tools/claudeConnection.js status|connect|repair|disconnect');
         System.exit(2);
     }
 } catch (error) {

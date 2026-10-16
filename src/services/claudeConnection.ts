@@ -4,7 +4,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {
-    connectSettings, connectionStatus, disconnectSettings, plannedEntries, sameSettings, type ConnectionStatus,
+    connectSettings, connectionStatus, disconnectSettings, plannedEntries, repairSettings, sameSettings, type ConnectionStatus,
 } from '../core/claudeSettings.js';
 
 /**
@@ -33,7 +33,7 @@ export class ClaudeConnection {
 
     status(): ConnectionStatus {
         this.tightenBackup();
-        return connectionStatus(this.read(this.path));
+        return connectionStatus(this.read(this.path), this.scripts());
     }
 
     /** The JSON connect() would add, pretty-printed, for the confirmation dialog. Throws SettingsError. */
@@ -52,6 +52,21 @@ export class ClaudeConnection {
             this.write(this.backupPath, original);
         GLib.mkdir_with_parents(GLib.path_get_dirname(this.path), 0o700);
         this.write(this.path, connected);
+    }
+
+    /**
+     * Makes a connection current when it is stale (the extension moved, an event is missing, or
+     * it was made by an older version). Throws SettingsError (invalid settings) or GLib errors.
+     */
+    repair(): void {
+        this.tightenBackup();
+        const original = this.read(this.path);
+        const repaired = repairSettings(original, this.scripts());
+        if (repaired === original)
+            return;
+        if (original !== null && !GLib.file_test(this.backupPath, GLib.FileTest.EXISTS))
+            this.write(this.backupPath, original);
+        this.write(this.path, repaired);
     }
 
     /** Throws SettingsError (invalid settings) or GLib errors (I/O). */

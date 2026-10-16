@@ -134,6 +134,14 @@ GSettings (`org.gnome.shell.extensions.islet`), edited in a libadwaita preferenc
 - **Daemon restarts:** when the daemon exits and no other daemon owns the name, the extension
   restarts it after 1 s, doubling up to 60 s; a daemon that ran for a minute resets the delay.
   The capsule greys out while the daemon is unavailable.
+- **Limits.** Anything on the session bus can call the daemon, so `ReportAgentEvent` is rate
+  limited (50 per second, bursts of 100) and `ReportPlanUsage` too (20 per second, bursts of 40);
+  the excess is dropped with one warning per 5 seconds. At most 200 sessions are tracked (the one
+  quiet the longest is forgotten first), and the aggregator forgets sessions and response ids
+  older than the 26 weeks shown, plus a week, once a day.
+- **Plan usage is not re-announced for nothing.** Claude Code runs the status line several times
+  per second during a reply with the same figures. A change in the figures is published and saved
+  at once; the same figures only refresh "measured at" every 30 seconds.
 - Media and focus methods are added with their modules (#10, #11).
 
 ## 4. Placement
@@ -289,6 +297,12 @@ playing, then plain "Claude".
 - Writes are atomic (temporary file and rename) and keep the file's permissions. If the file is
   not valid JSON, Islet refuses to touch it and says why. Honors `$CLAUDE_CONFIG_DIR`.
 - Claude Code reads hooks when a session starts, so running sessions need a restart.
+- **Stale connections.** The commands carry the absolute path of the bridge, so a connection can
+  go stale (the extension moved, an event was added in a newer version, or it was made by an
+  older command format). Islet's entries are recognised by an `islet-bridge` tag in the command,
+  not by a path, and compared with what the current version would write; Preferences then shows
+  "Needs repair" with a **Repair…** button, and `tools/claudeConnection.js repair` does the same.
+  Repair replaces only Islet's entries and keeps the backup and the chained status line.
 
 ## 7. Security and privacy
 

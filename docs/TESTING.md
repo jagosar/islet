@@ -8,7 +8,7 @@ catch its failures.
 |---|---|---|---|
 | **Static** | Types, strict type-aware lint, ShellCheck | `npm run typecheck`, `npm run lint` | CI, every push |
 | **Unit** | The pure core: parsing, token accounting, sessions, focus timer, settings merge, protocol. Gated at 95 % lines, 90 % branches | `tests/core`, `npm run test:coverage` | CI, Node 22 and 24 |
-| **GJS smoke** | The built core under GJS (`Intl`, `TextDecoder` and module loading differ from Node) | `tests/gjs`, `npm run test:gjs` | CI |
+| **GJS smoke** | The built core under GJS (`Intl`, `TextDecoder` and module loading differ from Node), and GJS-only regressions run under a fixed time zone (`TZ=Europe/Berlin`: the focus history around a time change) | `tests/gjs`, `npm run test:gjs` | CI |
 | **Integration** | The real daemon, bridges and `claudeConnection` tool as gjs processes on a **private D-Bus session** with synthetic transcripts and a temporary Claude config | `tests/integration`, `npm run test:integration` | CI |
 | **Package** | The extension zip (contents, imports, metadata, schema, licence headers) and `install.sh` / `uninstall.sh` against stand-ins for `gnome-extensions` and `gsettings` | `tests/package` | CI |
 | **End to end** | The extension in a nested GNOME Shell: capsule text, live activities, centring of the clock, daemon crash and restart; optionally the shortcut and tabs | `tests/e2e`, `npm run e2e` | Locally (needs a GNOME desktop) |
@@ -41,3 +41,10 @@ catch its failures.
 - **Memory budget** (`tests/integration/performance.test.ts`): 120 MB of transcripts, daemon under
   90 MB. The test was checked by mutation: the variant that broke the budget once (raw bytes per
   line, 136 MB) fails it.
+
+## Regression tests are checked by mutation
+
+A regression test only protects if it fails without the fix. For the audit fixes each one was
+checked by reverting the fix in `dist/` and running the test: 24-hour day subtraction fails the
+time-change test, no plan throttling fails the three limit tests, raw-byte line reading fails the
+memory budget. When you add a fix, do the same before opening the pull request.

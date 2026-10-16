@@ -12,6 +12,9 @@ export const SESSION_EXPIRY: Record<SessionState, number> = {
     'idle': 60 * 60,
 };
 
+/** More sessions than this are not tracked: the ones quiet the longest are forgotten first. */
+export const MAX_SESSIONS = 200;
+
 /** Most urgent first. */
 const PRIORITY: SessionState[] = ['needs-permission', 'waiting', 'working', 'finished', 'idle'];
 
@@ -126,7 +129,20 @@ export class SessionTracker {
             since: existing?.state === state ? existing.since : now,
             lastEventAt: now,
         });
+        this.evictBeyondLimit();
         return true;
+    }
+
+    private evictBeyondLimit(): void {
+        while (this.sessions.size > MAX_SESSIONS) {
+            let oldest: TrackedSession | null = null;
+            for (const session of this.sessions.values()) {
+                if (!oldest || session.lastEventAt < oldest.lastEventAt)
+                    oldest = session;
+            }
+            if (oldest)
+                this.sessions.delete(oldest.sessionId);
+        }
     }
 
     /** Drops expired sessions; returns true if any was dropped. */

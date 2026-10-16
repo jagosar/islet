@@ -35,12 +35,12 @@ export default class IsletPreferences extends ExtensionPreferences {
         group.add(row);
 
         const refresh = () => {
-            const {hooks, statusLine} = connection.status();
-            const connected = hooks && statusLine;
-            row.subtitle = connected
-                ? _('Connected · %s').replace('%s', connection.displayPath)
-                : _('Not connected · %s').replace('%s', connection.displayPath);
-            button.label = connected ? _('Disconnect') : _('Connect…');
+            const {hooks, statusLine, stale} = connection.status();
+            const connected = hooks && statusLine && !stale;
+            const partly = (hooks || statusLine) && !connected;
+            row.subtitle = (connected ? _('Connected · %s') : partly ? _('Needs repair · %s') : _('Not connected · %s'))
+                .replace('%s', connection.displayPath);
+            button.label = connected ? _('Disconnect') : partly ? _('Repair…') : _('Connect…');
             button.remove_css_class(connected ? 'suggested-action' : 'destructive-action');
             button.add_css_class(connected ? 'destructive-action' : 'suggested-action');
         };
@@ -52,18 +52,18 @@ export default class IsletPreferences extends ExtensionPreferences {
         };
 
         button.connect('clicked', () => {
-            const {hooks, statusLine} = connection.status();
-            if (hooks && statusLine)
+            const {hooks, statusLine, stale} = connection.status();
+            if (hooks && statusLine && !stale)
                 this.confirmDisconnect(window, connection, refresh, fail);
             else
-                this.confirmConnect(window, connection, refresh, fail);
+                this.confirmConnect(window, connection, refresh, fail, (hooks || statusLine) ? 'repair' : 'connect');
         });
         refresh();
         return group;
     }
 
     private confirmConnect(window: Adw.PreferencesWindow, connection: ClaudeConnection, refresh: () => void,
-        fail: (heading: string, error: unknown) => void): void {
+        fail: (heading: string, error: unknown) => void, mode: 'connect' | 'repair' = 'connect'): void {
         let preview: string;
         try {
             preview = connection.preview();
@@ -77,22 +77,28 @@ export default class IsletPreferences extends ExtensionPreferences {
         const scroller = new Gtk.ScrolledWindow({child: view, min_content_height: 220, max_content_height: 320, propagate_natural_height: true});
         scroller.add_css_class('card');
 
+        const repairing = mode === 'repair';
         const dialog = new Adw.AlertDialog({
-            heading: _('Connect Claude Code?'),
-            body: _('Islet will add these entries to %s. Everything else in the file is kept, an existing status line keeps working through Islet, a backup is saved next to it, and Disconnect removes exactly these entries. Restart running Claude Code sessions afterwards.')
+            heading: repairing ? _('Repair the Claude Code connection?') : _('Connect Claude Code?'),
+            body: (repairing
+                ? _('The connection in %s is out of date (Islet moved, or it was made by an older version). Islet will replace its own entries with these. Everything else in the file is kept. Restart running Claude Code sessions afterwards.')
+                : _('Islet will add these entries to %s. Everything else in the file is kept, an existing status line keeps working through Islet, a backup is saved next to it, and Disconnect removes exactly these entries. Restart running Claude Code sessions afterwards.'))
                 .replace('%s', connection.displayPath),
             extra_child: scroller,
         });
         dialog.add_response('cancel', _('Cancel'));
-        dialog.add_response('connect', _('Connect'));
+        dialog.add_response('connect', repairing ? _('Repair') : _('Connect'));
         dialog.set_response_appearance('connect', Adw.ResponseAppearance.SUGGESTED);
         dialog.connect('response', (_dialog: Adw.AlertDialog, response: string) => {
             if (response !== 'connect')
                 return;
             try {
-                connection.connect();
+                if (repairing)
+                    connection.repair();
+                else
+                    connection.connect();
             } catch (error) {
-                fail(_('Could not connect Claude Code'), error);
+                fail(repairing ? _('Could not repair the connection') : _('Could not connect Claude Code'), error);
             }
             refresh();
         });
