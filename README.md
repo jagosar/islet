@@ -35,6 +35,18 @@ gnome-extensions enable islet@jagosar.github.io
 
 To remove it: `gnome-extensions uninstall islet@jagosar.github.io`.
 
+## Performance
+
+Measured on the development machine (Ubuntu 26.04, GNOME 50.1), daemon on GJS 1.88:
+
+| Transcripts | First scan | Daemon memory (RSS) | Daemon CPU while idle |
+|---|---|---|---|
+| A real `~/.claude` (a few MB) | under 1 s | 38 MB | 0 ms per 30 s |
+| Heavy use: 207 MB, 60,000 responses over 26 weeks | ~1 s | 45 MB | 0 ms per 30 s |
+
+An empty GJS process takes about 31 MB. The extension adds no timers while nothing changes; the
+focus countdown ticks once per second only while it runs.
+
 ## Development
 
 ```bash
