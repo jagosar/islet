@@ -256,13 +256,21 @@ playing, then plain "Claude".
 
 ## 6. Claude Code integration (writing `settings.json`)
 
-- **Opt-in only**, from a "Connect Claude Code" button in Preferences. Never automatic.
-- Before writing, the window shows the exact JSON that will be added. The original file is backed
-  up next to it (`settings.json.islet-backup-YYYYMMDD-HHMMSS`), the merge preserves every other
-  key, and the write is atomic.
-- An existing `statusLine` is kept and chained (see §5). Existing hooks are kept; ours are added
-  alongside and tagged so **Disconnect** removes exactly them.
-- Honors `$CLAUDE_CONFIG_DIR`. If the file is not valid JSON, we refuse to touch it and say why.
+- **Opt-in only**, from **Connect…** in Preferences, which first shows the exact JSON it will add.
+  The uninstaller disconnects through `tools/claudeConnection.js` (`status|connect|disconnect`).
+- Islet adds hooks for `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `Stop` and
+  `Notification`, and a status line. Its entries are recognised by the bridge path in their
+  command; every other key and hook is kept.
+- An existing status line is chained: Islet's command passes the previous one (base64) to the
+  bridge, which runs it with the same input and prints its output unchanged.
+- **Safe if Islet disappears:** the commands check that the bridge exists. Without it, hooks do
+  nothing and exit 0, and the status line runs the user's previous command directly.
+- The original file is saved as `settings.json.islet-backup`. **Disconnect** restores those
+  exact bytes when nothing else changed meanwhile, otherwise removes only Islet's entries (and
+  restores the previous status line). A file Islet created is deleted again.
+- Writes are atomic (temporary file and rename) and keep the file's permissions. If the file is
+  not valid JSON, Islet refuses to touch it and says why. Honors `$CLAUDE_CONFIG_DIR`.
+- Claude Code reads hooks when a session starts, so running sessions need a restart.
 
 ## 7. Security and privacy
 
