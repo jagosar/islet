@@ -1,19 +1,18 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import System from 'system';
 
 import {UsageAggregator, dayKey} from '../core/usage/aggregator.js';
 import {mayHoldUsage, parseCostStateLine, parseUsageLine} from '../core/usage/claudeTranscript.js';
 import {HISTORY_DAYS, buildUsageSnapshot} from '../core/usage/snapshot.js';
 import type {IsletService} from './service.js';
 
-const READ_CHUNK_BYTES = 1024 * 1024;
 /** Work per idle slice while scanning, so D-Bus calls are still answered quickly. */
 const SLICE_MS = 20;
 /** Claude Code writes a reply in several appends; read once they settle. */
 const DEBOUNCE_MS = 300;
 /** While ~/.claude/projects does not exist yet, look for it this often. */
 const MISSING_ROOT_RETRY_S = 300;
-const NEWLINE = 0x0a;
 
 interface Cursor {
     inode: string;
@@ -156,6 +155,9 @@ export class UsageModule {
                 return GLib.SOURCE_CONTINUE;
             this.sliceId = 0;
             this.publish();
+            // Reading leaves megabytes of decoded text behind; collect it now rather than
+            // whenever the engine next decides to, so the daemon stays small while idle.
+            System.gc();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -178,24 +180,21 @@ export class UsageModule {
             if (size === cursor.offset)
                 return;
 
-            const stream = file.read(null);
-            stream.seek(cursor.offset, GLib.SeekType.SET, null);
-            let carry = new Uint8Array(0);
+            // Line by line: decoding large chunks into strings kept ~190 MB of a 200 MB history
+            // resident; reading lines peaks below 50 MB at the same speed (issue #16).
+            const raw = file.read(null);
+            raw.seek(cursor.offset, GLib.SeekType.SET, null);
+            const stream = new Gio.DataInputStream({base_stream: raw});
             for (;;) {
-                const chunk = stream.read_bytes(READ_CHUNK_BYTES, null).toArray();
-                if (chunk.length === 0)
+                const [line, length] = stream.read_line_utf8(null);
+                if (line === null)
                     break;
-                const buffer = new Uint8Array(carry.length + chunk.length);
-                buffer.set(carry);
-                buffer.set(chunk, carry.length);
-
-                const end = buffer.lastIndexOf(NEWLINE) + 1;
-                if (end > 0) {
-                    this.readLines(buffer.subarray(0, end));
-                    cursor.offset += end;
-                }
-                // A partial last line stays unread until its newline arrives.
-                carry = buffer.slice(end);
+                // A last line without its newline yet is partial: leave it for the next read.
+                // (size is from before reading, so a line that grew past it is left too.)
+                if (cursor.offset + length + 1 > size)
+                    break;
+                cursor.offset += length + 1;
+                this.readLine(line);
             }
             stream.close(null);
         } catch (error) {
@@ -203,19 +202,17 @@ export class UsageModule {
         }
     }
 
-    private readLines(bytes: Uint8Array): void {
-        for (const line of new TextDecoder().decode(bytes).split('\n')) {
-            if (!mayHoldUsage(line))
-                continue;
-            const record = parseUsageLine(line);
-            if (record) {
-                this.aggregator.add(record);
-                continue;
-            }
-            const costState = parseCostStateLine(line);
-            if (costState)
-                this.aggregator.setSessionReference(costState.sessionId, costState.models);
+    private readLine(line: string): void {
+        if (!mayHoldUsage(line))
+            return;
+        const record = parseUsageLine(line);
+        if (record) {
+            this.aggregator.add(record);
+            return;
         }
+        const costState = parseCostStateLine(line);
+        if (costState)
+            this.aggregator.setSessionReference(costState.sessionId, costState.models);
     }
 
     private publish(): void {

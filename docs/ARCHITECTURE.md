@@ -289,6 +289,9 @@ playing, then plain "Claude".
   artifact. Actions pinned by SHA, `contents: read`.
 - **Budgets (measured, not promised):** daemon idle CPU ≈ 0 %, RSS target < 50 MB; extension
   adds no timers while nothing changes (1 Hz only while a countdown is visible).
+  Measured (#16): 38 MB on a real history and 45 MB on 207 MB of transcripts, first scan about
+  1 s, 0 ms CPU per 30 s idle. Reading line by line with `Gio.DataInputStream` was the fix:
+  decoding large chunks with `TextDecoder` and `split()` kept up to 235 MB resident.
 - **Compatibility:** GNOME 50 first (Ubuntu 26.04 LTS). GNOME 51 added to `shell-version` only
   after it has been tested.
 
