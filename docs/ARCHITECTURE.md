@@ -143,8 +143,9 @@ work: no watchers, no timers, no processes.
   the first response of a session; either window may be absent.
 - `islet-statusline` forwards those numbers to the daemon and then runs the user's previous
   status line command (if any) and prints its output unchanged, so nothing visible changes.
-- **Spike S4:** the desktop app does **not** run the status line; the terminal does; VS Code is
-  still to be checked. So plan usage only refreshes while a terminal session is active. The UI
+- **Spike S4:** the desktop app does **not** run the status line; the terminal does, several
+  times per reply, and `rate_limits.five_hour` / `seven_day` appear from the first reply on (seen
+  on a Max/Pro login: 32 % and 4 %); VS Code is still to be checked. So plan usage only refreshes while a terminal session is active. The UI
   must say "plan usage comes from terminal sessions" and show when the figure was last measured,
   and the compact capsule should not lead with a stale percentage.
 - Never computed from token counts. Never read from the OAuth token or undocumented endpoints.
@@ -167,7 +168,7 @@ work: no watchers, no timers, no processes.
   | Entry point | Hooks (`Notification`, `Stop`) | Status line (plan usage) |
   |---|---|---|
   | Desktop app (`claude-desktop`) | ✓ both, after the stdin fix below | ✗ never runs |
-  | Terminal CLI (`cli`) | not yet verified (login had expired) | ✓ runs |
+  | Terminal CLI (`cli`) | ✓ `SessionStart`, `Notification`, `Stop` | ✓ runs; `rate_limits` arrive after the first reply |
   | VS Code (`claude-vscode`) | not yet verified | not yet verified |
 
   **Bug found:** the desktop app passes hook input through a socket; opening `/dev/stdin` on a
