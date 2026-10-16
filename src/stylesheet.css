@@ -124,3 +124,84 @@
 .islet-heatmap {
   margin-top: 4px;
 }
+
+/* Tabs, buttons, music and focus */
+
+.islet-expanded {
+  spacing: 2px;
+}
+
+.islet-tabs {
+  spacing: 4px;
+  padding: 6px 12px 0;
+}
+
+.islet-tab {
+  padding: 4px 12px;
+  border-radius: 99px;
+}
+
+.islet-tab:hover {
+  background-color: rgba(127, 127, 127, 0.15);
+}
+
+.islet-tab:checked {
+  background-color: rgba(127, 127, 127, 0.3);
+  font-weight: bold;
+}
+
+.islet-tab:focus,
+.islet-button:focus,
+.islet-control:focus {
+  box-shadow: inset 0 0 0 2px rgba(127, 127, 127, 0.6);
+}
+
+.islet-buttons {
+  spacing: 6px;
+  margin-top: 8px;
+}
+
+.islet-button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background-color: rgba(127, 127, 127, 0.18);
+}
+
+.islet-button:hover {
+  background-color: rgba(127, 127, 127, 0.3);
+}
+
+.islet-track {
+  spacing: 12px;
+  margin-top: 8px;
+}
+
+.islet-art {
+  border-radius: 8px;
+}
+
+.islet-track-title {
+  font-weight: bold;
+}
+
+.islet-controls {
+  spacing: 18px;
+  margin-top: 10px;
+}
+
+.islet-control {
+  padding: 8px;
+  border-radius: 99px;
+}
+
+.islet-control:hover {
+  background-color: rgba(127, 127, 127, 0.2);
+}
+
+.islet-control:insensitive {
+  color: rgba(127, 127, 127, 0.6);
+}
+
+.islet-countdown {
+  margin: 6px 0;
+}

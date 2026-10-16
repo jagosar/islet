@@ -31,9 +31,28 @@ describe('compactView', () => {
             .toEqual({text: '2 sessions need you', tone: 'attention'});
     });
 
-    it('is muted while the daemon is unavailable, whatever the data', () => {
+    it('is muted while the daemon is unavailable, whatever the Claude data', () => {
         expect(compactView({...base, available: false, sessions: [session('a', 'islet', 'needs-permission')]}))
             .toEqual({text: 'Claude', tone: 'muted'});
+    });
+
+    it('shows a running focus session before Claude usage, and after sessions that need the user', () => {
+        const plan: PlanUsage = {measuredAt: now, fiveHour: {usedPercentage: 33, resetsAt: now + 100}};
+        const focus = {remainingS: 1122, paused: false};
+        expect(compactView({...base, plan, focus})).toEqual({text: 'Focus 18:42', tone: 'normal'});
+        expect(compactView({...base, focus: {...focus, paused: true}})).toEqual({text: 'Focus paused · 18:42', tone: 'muted'});
+        expect(compactView({...base, focus, sessions: [session('a', 'islet', 'waiting')]}).text).toBe('islet is waiting');
+    });
+
+    it('keeps focus working without the daemon', () => {
+        expect(compactView({...base, available: false, focus: {remainingS: 60, paused: false}}).text).toBe('Focus 1:00');
+    });
+
+    it('shows what is playing only when Claude has nothing to show', () => {
+        const plan: PlanUsage = {measuredAt: now, fiveHour: {usedPercentage: 33, resetsAt: now + 100}};
+        expect(compactView({...base, nowPlaying: 'Song — Band'})).toEqual({text: '♪ Song — Band', tone: 'normal'});
+        expect(compactView({...base, plan, nowPlaying: 'Song — Band'}).text).toBe('Claude 33%');
+        expect(compactView({...base, available: false, nowPlaying: 'Song — Band'}).text).toBe('♪ Song — Band');
     });
 
     it('translates', () => {
