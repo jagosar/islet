@@ -14,7 +14,7 @@ out="$root/$uuid.zip"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 cp -r "$root/dist/." "$stage/"
-rm -rf "$stage/dev"
+rm -rf "${stage:?}/dev"
 find "$stage" -name '*.js' -print0 | xargs -0 node "$root/scripts/strip-dev.mjs"
 
 rm -f "$out"
