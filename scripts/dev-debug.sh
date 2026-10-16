@@ -5,6 +5,7 @@
 #   scripts/dev-debug.sh screenshot FILE.png   screenshot of the nested Shell
 #   scripts/dev-debug.sh menu                  open or close the capsule menu
 #   scripts/dev-debug.sh page ID               show a page of the expanded view (claude, media, focus)
+#   scripts/dev-debug.sh keys COMBO            press keys, e.g. Control_L+Alt_L+space, Right, Escape
 #   scripts/dev-debug.sh call METHOD ARGS...   call a method of the Islet daemon
 set -euo pipefail
 
@@ -16,9 +17,10 @@ case "${1:-}" in
     screenshot) "${debug[@]}" --method io.github.jagosar.IsletDebug.Screenshot "$(realpath -m "$2")" >/dev/null ;;
     menu) "${debug[@]}" --method io.github.jagosar.IsletDebug.ToggleMenu >/dev/null ;;
     page) "${debug[@]}" --method io.github.jagosar.IsletDebug.SelectPage "$2" >/dev/null ;;
+    keys) "${debug[@]}" --method io.github.jagosar.IsletDebug.PressKeys "$2" >/dev/null ;;
     call)
         method="$2"; shift 2
         gdbus call --address "$address" --dest io.github.jagosar.Islet --object-path /io/github/jagosar/Islet \
             --method "io.github.jagosar.Islet1.$method" "$@" ;;
-    *) sed -n '2,9p' "$0"; exit 2 ;;
+    *) sed -n '2,10p' "$0"; exit 2 ;;
 esac

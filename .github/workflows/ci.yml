@@ -28,9 +28,10 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-      # The core also runs inside GNOME Shell and the daemon, so check it under GJS too.
-      - name: Install GJS
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends gjs
+      # The core also runs inside GNOME Shell and the daemon, so check it under GJS too. The
+      # build compiles the GSettings schemas (glib-compile-schemas, from libglib2.0-bin).
+      - name: Install GJS and GLib tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends gjs libglib2.0-bin
       - run: npm run test:gjs
 
       - run: npm run pack

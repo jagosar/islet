@@ -1,3 +1,4 @@
+import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
@@ -22,10 +23,15 @@ export class ExpandedView extends St.BoxLayout {
         super({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-expanded'});
 
         const tabs = new St.BoxLayout({style_class: 'islet-tabs', x_align: Clutter.ActorAlign.CENTER});
+        tabs.accessible_role = Atk.Role.PAGE_TAB_LIST;
         this.add_child(tabs);
         for (const page of pages) {
             const button = new St.Button({label: page.title, style_class: 'islet-tab', can_focus: true, toggle_mode: false});
+            button.accessible_role = Atk.Role.PAGE_TAB;
             button.connect('clicked', () => this.select(page.id));
+            // The Shell's focus manager moves focus between tabs with the arrow keys; following
+            // focus makes them switch pages, like any tab strip.
+            button.connect('key-focus-in', () => this.select(page.id));
             tabs.add_child(button);
             this.buttons.set(page.id, button);
             this.pages.set(page.id, page.actor);
@@ -37,6 +43,11 @@ export class ExpandedView extends St.BoxLayout {
 
     get selectedPage(): string {
         return this.selected;
+    }
+
+    /** Gives keyboard focus to the selected tab, so Tab and the arrows work right away. */
+    focusSelectedTab(): void {
+        this.buttons.get(this.selected)?.grab_key_focus();
     }
 
     select(id: string): void {

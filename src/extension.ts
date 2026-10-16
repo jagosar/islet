@@ -1,4 +1,6 @@
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -19,6 +21,8 @@ import {FocusPanel} from './ui/focusPanel.js';
 import {MediaPanel} from './ui/mediaPanel.js';
 
 const CAPSULE_ROLE = 'islet-capsule';
+/** The GSettings key holding the shortcut that opens or closes the island. */
+const TOGGLE_KEY = 'toggle-island';
 const SPACER_ROLE = 'islet-spacer';
 /** While the expanded view is open, relative times ("5 min ago") refresh this often. */
 const PANEL_REFRESH_S = 30;
@@ -108,6 +112,9 @@ export default class IsletExtension extends Extension {
             Main.panel.addToStatusArea(CAPSULE_ROLE, this.capsule, -1, 'center');
         }
 
+        Main.wm.addKeybinding(TOGGLE_KEY, this.getSettings(), Meta.KeyBindingFlags.NONE,
+            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW, () => this.capsule?.menu.toggle());
+
         this.daemon.start();
         this.mpris.start();
         this.focus.load();
@@ -116,6 +123,7 @@ export default class IsletExtension extends Extension {
     }
 
     disable(): void {
+        Main.wm.removeKeybinding(TOGGLE_KEY);
         this.debug?.stop();
         this.debug = null;
         for (const id of this.sources.values())
@@ -227,6 +235,8 @@ export default class IsletExtension extends Extension {
     private onMenuToggled(open: boolean): void {
         if (open && this.state)
             this.panel?.update(this.state);
+        // The menu manager sets key focus after this signal, so take it on the next cycle.
+        this.schedule('focus-tab', open ? 0 : null, () => this.expanded?.focusSelectedTab());
         const refresh = () => {
             this.panel?.refresh();
             this.schedule('panel', PANEL_REFRESH_S * 1000, refresh);

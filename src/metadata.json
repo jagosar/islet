@@ -2,7 +2,10 @@
   "uuid": "islet@jagosar.github.io",
   "name": "Islet",
   "description": "A small dynamic island next to the clock: Claude Code usage and live agent alerts, what's playing and a focus timer.",
-  "shell-version": ["50"],
+  "shell-version": [
+    "50"
+  ],
   "url": "https://github.com/jagosar/islet",
-  "gettext-domain": "islet"
+  "gettext-domain": "islet",
+  "settings-schema": "org.gnome.shell.extensions.islet"
 }
