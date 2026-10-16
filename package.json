@@ -1,0 +1,24 @@
+{
+  "name": "islet",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A small dynamic island for the GNOME top bar",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "rm -rf dist && tsc && cp src/metadata.json src/stylesheet.css dist/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "nested": "npm run build && scripts/nested.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@girs/gjs": "5.5.0",
+    "@girs/gnome-shell": "50.0.4",
+    "eslint": "10.12.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  }
+}

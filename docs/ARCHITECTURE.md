@@ -215,11 +215,13 @@ restart; daily history (today and 7 days).
 
 ```
 islet/
-├── src/
+├── src/             compiles 1:1 into dist/, which is the extension directory
+│   ├── extension.ts, prefs.ts, metadata.json, stylesheet.css
 │   ├── core/        pure TypeScript: parsers, aggregation, state machine, settings merge
+│   ├── ui/          Shell widgets (capsule, expanded view)
 │   ├── daemon/      GJS: watchers, providers, D-Bus service
-│   ├── extension/   extension.ts, prefs.ts, ui/
 │   └── bridge/      islet-hook, islet-statusline
+├── scripts/         nested.sh: isolated nested Shell for manual testing
 ├── schemas/         org.gnome.shell.extensions.islet.gschema.xml
 ├── data/            D-Bus interface XML
 ├── po/              translations
