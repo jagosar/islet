@@ -13,15 +13,8 @@ events to the nested Shell started by `npm run nested`.
 
 Nothing reaches your real session: the hooks only talk to the nested Shell's own D-Bus session.
 
-## Status line probe (spike S4)
+## Status line
 
-The folder also sets a status line command, `scripts/dev-statusline-probe.sh`, which records
-each time Claude Code runs it, to learn which entry points run status lines at all. It does not
-need the nested Shell. After using Claude Code here, read the log with:
-
-```bash
-cat "$XDG_RUNTIME_DIR/islet-devkit/statusline-probe.log"
-```
-
-Each line has the time, the entry point, the Claude Code version and the 5-hour and 7-day plan
-usage, but no prompts, paths or messages.
+The folder also sets the status line to `scripts/dev-statusline.sh`, which runs Islet's status
+line bridge against the nested Shell: in terminal sessions it sends the 5-hour and 7-day plan
+figures to the capsule and shows them as `5h 33% · 7d 4%`.
