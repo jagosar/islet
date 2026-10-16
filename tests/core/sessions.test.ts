@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, it} from 'vitest';
 import type {AgentEvent} from '../../src/core/agentEvents.js';
-import {SESSION_EXPIRY, SessionTracker} from '../../src/core/sessions.js';
+import {SESSION_EXPIRY, SessionTracker, decodeSessionSnapshot, encodeSessionSnapshot} from '../../src/core/sessions.js';
 
 function event(hookEventName: string, notificationType?: string, sessionId = 'a', cwd = '/home/me/code/islet'): AgentEvent {
     return notificationType ? {sessionId, cwd, hookEventName, notificationType} : {sessionId, cwd, hookEventName};
@@ -75,6 +75,38 @@ describe('SessionTracker', () => {
         expect(tracker.expire(SESSION_EXPIRY.finished)).toBe(true);
         expect(tracker.list().map(s => s.sessionId)).toEqual(['busy']);
         expect(tracker.secondsUntilNextExpiry(SESSION_EXPIRY.finished)).toBe(SESSION_EXPIRY.working - SESSION_EXPIRY.finished);
+    });
+
+    describe('persistence across a restart', () => {
+        it('restores sessions with their state, start time and last event', () => {
+            tracker.apply(event('UserPromptSubmit', undefined, 'a'), 100);
+            tracker.apply(event('Notification', 'permission_prompt', 'b'), 200);
+            const restored = new SessionTracker();
+            restored.restore(decodeSessionSnapshot(encodeSessionSnapshot(tracker.snapshot())), 300);
+            expect(restored.list()).toEqual(tracker.list());
+            expect(restored.secondsUntilNextExpiry(300)).toBe(tracker.secondsUntilNextExpiry(300));
+        });
+
+        it('drops sessions that expired while the daemon was not running', () => {
+            tracker.apply(event('Stop', undefined, 'done'), 0);
+            tracker.apply(event('UserPromptSubmit', undefined, 'busy'), 0);
+            const restored = new SessionTracker();
+            restored.restore(tracker.snapshot(), SESSION_EXPIRY.finished + 1);
+            expect(restored.list().map(s => s.sessionId)).toEqual(['busy']);
+        });
+
+        it.each([['garbage', 'nope'], ['another version', '{"version":2,"sessions":[]}'], ['not a list', '{"version":1,"sessions":{}}']])('reads %s as nothing', (_n, text) => {
+            expect(decodeSessionSnapshot(text)).toEqual([]);
+        });
+
+        it('keeps valid entries and drops invalid ones', () => {
+            const text = JSON.stringify({version: 1, sessions: [
+                {sessionId: 'ok', project: 'p', state: 'working', since: 1, lastEventAt: 2},
+                {sessionId: 'bad', project: 'p', state: 'sleeping', since: 1, lastEventAt: 2},
+                {sessionId: 'worse', project: 'p', state: 'working', since: 'x', lastEventAt: 2},
+            ]});
+            expect(decodeSessionSnapshot(text).map(s => s.sessionId)).toEqual(['ok']);
+        });
     });
 
     it('has no expiry when empty', () => {

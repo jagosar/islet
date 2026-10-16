@@ -60,6 +60,17 @@ export default class IsletExtension extends Extension {
     private debug: {stop(): void} | null = null;
 
     enable(): void {
+        try {
+            this.start();
+        } catch (error) {
+            // Whatever was built before the failure must not stay behind in the panel and the
+            // session: undo it all, then let GNOME Shell see the error.
+            this.disable();
+            throw error;
+        }
+    }
+
+    private start(): void {
         this.live = new LiveQueue();
         this.daemon = new DaemonClient(`${this.path}/daemon/main.js`, {
             onState: state => this.onState(state),
@@ -269,6 +280,10 @@ export default class IsletExtension extends Extension {
     private startDevDebug(): void {
         if (!GLib.getenv('ISLET_DEV_DEBUG') || !GLib.file_test(`${this.path}/dev/debugService.js`, GLib.FileTest.EXISTS))
             return;
+        // Fault injection for the end-to-end test of enable()'s rollback; like the debug service,
+        // it exists only where dev/ was not stripped (never in the package).
+        if (GLib.getenv('ISLET_DEV_FAIL_ENABLE'))
+            throw new Error('ISLET_DEV_FAIL_ENABLE: simulated failure at the end of enable()');
         import('./dev/debugService.js')
             .then(({DebugService}) => {
                 if (this.capsule && this.expanded)

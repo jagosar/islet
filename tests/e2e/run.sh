@@ -98,6 +98,23 @@ echo "log"
 errors="$(grep -cE 'JS ERROR' "$log" || true)"
 check "no JS errors in the Shell log" "$errors" "0"
 
+echo "enable() rolls back when it fails (a failure is injected at its end)"
+pkill -f "^gnome-shell --devkit"; sleep 1
+rm -rf "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/state"
+(cd "$root" && CLAUDE_CONFIG_DIR="$work/claude" ISLET_NESTED_NO_ANIMATIONS=1 ISLET_DEV_FAIL_ENABLE=1 setsid nohup scripts/nested.sh > "$work/fail.log" 2>&1 &)
+bus_ready() { [ -s "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/bus-address" ] && grep -q "GNOME Shell started" "$work/fail.log"; }
+wait_for 90 bus_ready || { echo "the nested Shell did not start"; tail -n 20 "$work/fail.log"; exit 2; }
+sleep 3
+extension_state() {
+    gdbus call --address "$(cat "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/bus-address")" --dest org.gnome.Shell.Extensions \
+        --object-path /org/gnome/Shell/Extensions --method org.gnome.Shell.Extensions.GetExtensionInfo islet@jagosar.github.io |
+        grep -o "'state': <[0-9.]*>" | grep -o '[0-9.]*>' | tr -d '>'
+}
+check "GNOME Shell sees the failure (state ERROR)" "$(extension_state)" "3.0"
+check "the daemon started by the failed enable() was stopped again" "$(pgrep -fc '[d]aemon/main\.js' || true)" "0"
+check "the injected error is logged once" "$(grep -c 'Extension islet@jagosar.github.io: Error: ISLET_DEV_FAIL_ENABLE' "$work/fail.log" || true)" "1"
+check "and nothing else fails (no error from disable())" "$(grep -c 'JS ERROR' "$work/fail.log" || true)" "0"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "e2e: all checks passed"; else echo "e2e: $failures check(s) failed"; fi
 exit "$((failures > 0))"

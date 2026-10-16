@@ -7,7 +7,8 @@
 //   over and the previous one exits when it loses the name.
 // - Losing the name or the bus connection ends the process.
 // - When org.gnome.Shell leaves the bus, the daemon exits too (unless ISLET_STANDALONE is set).
-// - SIGTERM (sent by the extension's disable()) keeps its default action: exit.
+// - SIGTERM (sent by the extension's disable()) keeps its default action: exit. Sessions are
+//   saved as they change, so nothing is pending at that point.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -15,13 +16,18 @@ import GLib from 'gi://GLib';
 import {BUS_NAME} from '../core/dbus.js';
 import {IsletService} from './service.js';
 import {SessionsModule} from './sessionsModule.js';
+import {SpoolModule} from './spoolModule.js';
 import {StateStore} from './stateStore.js';
 import {UsageModule} from './usageModule.js';
 
 const loop = new GLib.MainLoop(null, false);
-const service = new IsletService(new StateStore());
-new SessionsModule(service);
+const store = new StateStore();
+const service = new IsletService(store);
+new SessionsModule(service, store);
 new UsageModule(service).start();
+// After the sessions were restored: replayed events apply on top of them.
+new SpoolModule(service).start();
+
 
 Gio.bus_own_name(
     Gio.BusType.SESSION,

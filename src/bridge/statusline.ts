@@ -16,6 +16,7 @@ import System from 'system';
 
 import {BUS_NAME, INTERFACE_NAME, OBJECT_PATH} from '../core/dbus.js';
 import {formatPlanStatusLine, planReportFromStatusLine} from '../core/statusLine.js';
+import {spool} from './spool.js';
 import {readStdinBytes} from './stdin.js';
 
 const CALL_TIMEOUT_MS = 200;
@@ -28,7 +29,9 @@ function reportPlanUsage(report: Record<string, number>): void {
             new GLib.Variant('(a{sd})', [report]), null,
             Gio.DBusCallFlags.NO_AUTO_START, CALL_TIMEOUT_MS, null);
     } catch {
-        // Islet is not running: the status line still works.
+        // Islet is not running: the status line still works, and the daemon will pick the figures
+        // up from the spool when it starts.
+        spool({kind: 'plan-usage', at: GLib.get_real_time() / 1_000_000, fields: report});
     }
 }
 

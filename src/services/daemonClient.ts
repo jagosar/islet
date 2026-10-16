@@ -113,7 +113,16 @@ export class DaemonClient {
             return;
         }
 
-        const process = Gio.Subprocess.new([gjs, '-m', this.daemonPath], Gio.SubprocessFlags.NONE);
+        let process: Gio.Subprocess;
+        try {
+            process = Gio.Subprocess.new([gjs, '-m', this.daemonPath], Gio.SubprocessFlags.NONE);
+        } catch (error) {
+            // A failure to start the daemon must not take the extension down with it: the capsule
+            // shows "unavailable", and starting is retried with the same backoff as a crash.
+            console.error(`Islet: could not start the daemon: ${String(error)}`);
+            this.scheduleRestart('could not start');
+            return;
+        }
         this.process = process;
         this.startedAt = GLib.get_monotonic_time();
         process.wait_async(this.cancellable, (_source, result) => {
@@ -134,17 +143,23 @@ export class DaemonClient {
         const ranFor = (GLib.get_monotonic_time() - this.startedAt) / 1_000_000;
         if (ranFor >= STABLE_RUN_S)
             this.restartDelay = FIRST_RESTART_DELAY_S;
+        this.scheduleRestart(`exited with ${how}`);
+    }
 
-        // Decide when the delay is over, not now: at exit time the proxy may not have seen the
-        // bus name released yet, and a daemon that replaced this one would still own it then.
+    /**
+     * Starts the daemon again after the backoff delay, unless another daemon owns the bus name by
+     * then. The decision is made when the delay is over, not now: at exit time the proxy may not
+     * have seen the name released yet, and a daemon that replaced this one would still own it.
+     */
+    private scheduleRestart(reason: string): void {
         this.restartId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, this.restartDelay, () => {
             this.restartId = 0;
             if (this.stopped)
                 return GLib.SOURCE_REMOVE;
             if (this.proxy?.g_name_owner) {
-                console.log(`Islet: the daemon exited with ${how}; another daemon serves Islet`);
+                console.log(`Islet: the daemon ${reason}; another daemon serves Islet`);
             } else {
-                console.warn(`Islet: the daemon exited with ${how}; restarting it`);
+                console.warn(`Islet: the daemon ${reason}; starting it`);
                 this.spawn();
             }
             return GLib.SOURCE_REMOVE;

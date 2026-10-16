@@ -28,7 +28,7 @@ export class IsletService {
     private usage: UsageSnapshot = {today: null, history: []};
     private plan: PlanUsage | null;
     private sessions: AgentSession[] = [];
-    private agentEventListener: ((fields: Record<string, string>) => void) | null = null;
+    private agentEventListener: ((fields: Record<string, string>, at: number) => void) | null = null;
 
     constructor(private readonly store: StateStore) {
         this.plan = decodePlanUsage(store.read(PLAN_USAGE_FILE) ?? '');
@@ -39,8 +39,8 @@ export class IsletService {
         this.exported.export(connection, OBJECT_PATH);
     }
 
-    /** Called for every valid agent event, after the signal went out. */
-    onAgentEvent(listener: (fields: Record<string, string>) => void): void {
+    /** Called for every valid agent event with its time (after the signal went out, if there is one). */
+    onAgentEvent(listener: (fields: Record<string, string>, at: number) => void): void {
         this.agentEventListener = listener;
     }
 
@@ -66,7 +66,20 @@ export class IsletService {
             return;
         }
         this.exported?.emit_signal('AgentEvent', new GLib.Variant('(a{ss})', [fields]));
-        this.agentEventListener?.(fields);
+        this.agentEventListener?.(fields, nowSeconds());
+    }
+
+    /** An event a bridge left in the spool while the daemon was not running: state only, no signal. */
+    replayAgentEvent(fields: Record<string, string>, at: number): void {
+        if (parseAgentEvent(fields))
+            this.agentEventListener?.(fields, at);
+    }
+
+    /** Plan usage from the spool, applied only if it is newer than what the daemon knows. */
+    replayPlanUsage(fields: Record<string, number>, at: number): void {
+        const plan = parsePlanUsageReport(fields, at);
+        if (plan && (!this.plan || plan.measuredAt >= this.plan.measuredAt))
+            this.updatePlan(plan);
     }
 
     ReportPlanUsage(fields: Record<string, number>): void {
@@ -75,6 +88,10 @@ export class IsletService {
             console.warn('islet-daemon: ignored an invalid plan usage report');
             return;
         }
+        this.updatePlan(plan);
+    }
+
+    private updatePlan(plan: PlanUsage): void {
         this.plan = plan;
         this.store.write(PLAN_USAGE_FILE, encodePlanUsage(plan));
         this.changed('PlanUsage', this.PlanUsage);

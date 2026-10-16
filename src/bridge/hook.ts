@@ -9,19 +9,27 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import {parseAgentEvent} from '../core/agentEvents.js';
 import {BUS_NAME, INTERFACE_NAME, OBJECT_PATH} from '../core/dbus.js';
 import {hookFieldsFromJson} from '../core/hookInput.js';
+import {spool} from './spool.js';
 import {readStdin} from './stdin.js';
 
 const CALL_TIMEOUT_MS = 200;
 
 try {
     const fields = hookFieldsFromJson(readStdin());
-    if (fields) {
-        Gio.DBus.session.call_sync(
-            BUS_NAME, OBJECT_PATH, INTERFACE_NAME, 'ReportAgentEvent',
-            new GLib.Variant('(a{ss})', [fields]), null,
-            Gio.DBusCallFlags.NO_AUTO_START, CALL_TIMEOUT_MS, null);
+    if (fields && parseAgentEvent(fields)) {
+        try {
+            Gio.DBus.session.call_sync(
+                BUS_NAME, OBJECT_PATH, INTERFACE_NAME, 'ReportAgentEvent',
+                new GLib.Variant('(a{ss})', [fields]), null,
+                Gio.DBusCallFlags.NO_AUTO_START, CALL_TIMEOUT_MS, null);
+        } catch {
+            // The daemon is not running (GNOME Shell switches the extension off while the screen
+            // is locked): leave the event for it to replay when it starts.
+            spool({kind: 'agent-event', at: GLib.get_real_time() / 1_000_000, fields});
+        }
     }
 } catch (error) {
     // Islet is not running or the input was unexpected: nothing to report. Development tools

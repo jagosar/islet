@@ -84,6 +84,30 @@ describe('usage from transcripts', () => {
         expect(sandbox.daemonLog).not.toMatch(/JS ERROR|cannot read/);
     });
 
+    it('is not stopped by a line with invalid UTF-8: it skips the damage and counts what follows', async () => {
+        const model = 'utf8-model';
+        const path = sandbox.writeTranscript('-p9', 's9', [line.assistant('s9', 'u1', model)]);
+        await waitFor('the first response', () => usageOf(model));
+
+        sandbox.append(path, Buffer.concat([Buffer.from('{"type":"user","message":"broken \xff\xfe bytes"}\n', 'latin1')]));
+        sandbox.append(path, `${line.assistant('s9', 'u2', model)}\n`);
+        await waitFor('the response after the damaged line', () => fresh(usageOf(model)!) === 500);
+
+        // A later append still works: the file is not stuck on the damaged line.
+        sandbox.append(path, `${line.assistant('s9', 'u3', model)}\n`);
+        await waitFor('a later response', () => fresh(usageOf(model)!) === 750);
+        expect(sandbox.daemonLog).not.toMatch(/cannot read a transcript/);
+    });
+
+    it('reads accented and emoji text without miscounting offsets', async () => {
+        const model = 'accents-model';
+        const path = sandbox.writeTranscript('-p10', 's10', [line.user('s10', 'ñandú → ✓ 🚀 ' + 'é'.repeat(200)), line.assistant('s10', 'a1', model)]);
+        await waitFor('the first response', () => usageOf(model));
+        sandbox.append(path, `${line.user('s10', 'más ñ 🚀')}\n${line.assistant('s10', 'a2', model)}\n`);
+        await waitFor('the appended response', () => fresh(usageOf(model)!) === 500);
+        expect(fresh(usageOf(model)!)).toBe(500);
+    });
+
     it('keeps its totals across a daemon restart without double counting', async () => {
         const model = 'restart-model';
         sandbox.writeTranscript('-p8', 's8', [line.assistant('s8', 'q1', model)]);

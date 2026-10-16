@@ -32,6 +32,7 @@ export class ClaudeConnection {
     }
 
     status(): ConnectionStatus {
+        this.tightenBackup();
         return connectionStatus(this.read(this.path));
     }
 
@@ -42,6 +43,7 @@ export class ClaudeConnection {
 
     /** Throws SettingsError (invalid settings) or GLib errors (I/O). */
     connect(): void {
+        this.tightenBackup();
         const original = this.read(this.path);
         const connected = connectSettings(original, this.scripts());
         if (connected === original)
@@ -87,7 +89,21 @@ export class ClaudeConnection {
         }
     }
 
+    /**
+     * settings.json can hold secrets (an API key in `env`), so a file created here is private.
+     * Replacing an existing file keeps its permissions; the backup version 0.1.0 created was
+     * world-readable, so an existing one is tightened.
+     */
     private write(path: string, text: string): void {
-        Gio.File.new_for_path(path).replace_contents(new TextEncoder().encode(text), null, false, Gio.FileCreateFlags.NONE, null);
+        Gio.File.new_for_path(path).replace_contents(new TextEncoder().encode(text), null, false, Gio.FileCreateFlags.PRIVATE, null);
+    }
+
+    private tightenBackup(): void {
+        const file = Gio.File.new_for_path(this.backupPath);
+        if (!file.query_exists(null))
+            return;
+        const mode = file.query_info('unix::mode', Gio.FileQueryInfoFlags.NONE, null).get_attribute_uint32('unix::mode');
+        if ((mode & 0o077) !== 0)
+            GLib.chmod(this.backupPath, 0o600);
     }
 }

@@ -85,6 +85,24 @@ Options evaluated:
   Shell leaves the bus every daemon exits. Known gap: a daemon the extension did not start (e.g.
   run by hand) survives `disable()` until the next `enable()` replaces it or the Shell exits.
 
+### 3.2.1 The lock screen
+
+GNOME Shell switches extensions off in session modes they do not declare, and Islet declares
+only `user`, so **the daemon stops when the screen locks and starts again at unlock** (it is not
+shown on the lock screen on purpose: project names are private). Claude Code keeps working
+meanwhile, so nothing may be lost:
+
+- **The bridges spool.** When the D-Bus call fails, `islet-hook` and `islet-statusline` leave the
+  event (or the latest plan usage) as a small private file in `$XDG_RUNTIME_DIR/islet/spool`,
+  written atomically, at most 500 files. The daemon replays the spool when it starts, in order
+  and with the events' own times, and also when a bridge leaves something while it runs. Replays
+  update state but raise no live activity: they are not news. Stale (over 6 h), damaged and
+  replayed files are deleted; files that are not ours are left alone.
+- **The sessions are saved** to `$XDG_STATE_HOME/islet/sessions.json` on every change and
+  restored (minus the expired) at start, so a restart does not forget them.
+- Declaring `unlock-dialog` was rejected: it would run the extension on the lock screen, where a
+  bug locks the user out, and EGO requires a justification for it.
+
 ### 3.3 Storage
 
 Daily aggregates per provider and model, plus a cursor (file, inode, offset) per transcript, in
