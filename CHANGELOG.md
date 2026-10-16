@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.1.1 — 2026-10-17
+
+A security fix and the robustness fixes from the first code audit. Upgrading is
+`./install.sh` from the new archive; an existing Claude Code connection is updated by itself.
+
+### Security
+
+- The backup `settings.json.islet-backup` was created readable by every user of the computer
+  (mode 0664) even when `settings.json` was private (0600), and `settings.json` can hold API keys.
+  Files Islet creates are now private; a backup left by 0.1.0 is tightened when you open
+  Preferences or run `./install.sh`. **If you connected Claude Code with 0.1.0, upgrade.**
+
+### Fixed
+
+- **Locking the screen no longer loses Claude Code events.** GNOME Shell switches extensions
+  off while the screen is locked. Hooks and the status line now leave what they could not deliver
+  in a private spool, which Islet replays when it starts, and sessions are saved and restored.
+- A transcript line with invalid UTF-8 no longer stops usage tracking for that file.
+- A failure while enabling the extension is undone completely; a daemon that cannot be started is
+  retried instead of breaking the extension.
+- The focus history lost a day's minutes after a time change (summer time).
+- A status line command that hangs no longer leaves processes behind.
+- A Claude Code connection that went out of date (Islet moved, or made by an older version) is
+  now reported as **Needs repair** in Preferences, with a **Repair…** button and a `repair`
+  command; `./install.sh` repairs it for you.
+
+### Changed
+
+- Plan usage is announced and saved when it changes, and otherwise once per 30 seconds, instead
+  of on every status line run.
+- Limits on what other programs can ask of Islet: rate limits on its D-Bus methods, at most 200
+  tracked sessions, and a daily cleanup of what the 26-week graph no longer shows.
+
+### Quality
+
+- Integration, package and end-to-end tests, a coverage gate, strict type-aware lint, ShellCheck,
+  a dependency audit and Dependabot, all in the CI pipeline. See `docs/TESTING.md`.
+
 ## 0.1.0 — 2026-10-16
 
 First release, for GNOME Shell 50.
