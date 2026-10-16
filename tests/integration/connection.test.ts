@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import {spawnSync} from 'node:child_process';
-import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {Sandbox, sessionsOf, waitFor} from './harness.js';
@@ -96,6 +96,48 @@ describe('Claude Code connection (tools/claudeConnection.js)', () => {
         expect(existsSync(settings)).toBe(true);
         expect(cli('disconnect').status).toBe(0);
         expect(existsSync(settings)).toBe(false);
+    });
+
+    describe('permissions (settings.json may hold API keys in env)', () => {
+        const mode = (path: string) => statSync(path).mode & 0o777;
+        const secret = JSON.stringify({env: {ANTHROPIC_API_KEY: 'sk-test'}}, null, 2) + '\n';
+
+        it('keeps the backup as private as the original', () => {
+            rmSync(`${settings}.islet-backup`, {force: true});
+            writeFileSync(settings, secret);
+            chmodSync(settings, 0o600);
+            expect(cli('connect').status).toBe(0);
+            expect(mode(`${settings}.islet-backup`)).toBe(0o600);
+            expect(mode(settings)).toBe(0o600);
+            cli('disconnect');
+        });
+
+        it('does not change the permissions of a settings file that already exists', () => {
+            writeFileSync(settings, secret);
+            chmodSync(settings, 0o644);
+            cli('connect');
+            expect(mode(settings)).toBe(0o644);
+            expect(mode(`${settings}.islet-backup`)).toBe(0o600);
+            cli('disconnect');
+            expect(mode(settings)).toBe(0o644);
+        });
+
+        it('creates a settings file that did not exist as private', () => {
+            rmSync(settings, {force: true});
+            cli('connect');
+            expect(mode(settings)).toBe(0o600);
+            cli('disconnect');
+        });
+
+        it('tightens a backup left behind by version 0.1.0, which was world-readable', () => {
+            writeFileSync(settings, secret);
+            chmodSync(settings, 0o600);
+            writeFileSync(`${settings}.islet-backup`, secret);
+            chmodSync(`${settings}.islet-backup`, 0o664);
+            expect(cli('status').status).toBe(0);
+            expect(mode(`${settings}.islet-backup`)).toBe(0o600);
+            rmSync(`${settings}.islet-backup`, {force: true});
+        });
     });
 
     it('exits 2 for an unknown command', () => {

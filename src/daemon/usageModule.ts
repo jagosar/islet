@@ -187,13 +187,27 @@ export class UsageModule {
                 return;
 
             // Line by line: decoding large chunks into strings kept ~190 MB of a 200 MB history
-            // resident; reading lines peaks below 50 MB at the same speed (issue #16).
+            // resident, and reading raw bytes per line kept ~170 MB; read_line_utf8 peaks below
+            // 50 MB at the same speed (issue #16). It throws on invalid UTF-8, though, so such a
+            // line is read again as bytes: otherwise one damaged line would stop the file for good.
             const raw = file.read(null);
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-assignment -- the Gio typings name GLib's enum separately
-            raw.seek(cursor.offset, GLib.SeekType.SET, null);
             const stream = new Gio.DataInputStream({base_stream: raw});
+            const seekTo = (offset: number): void => {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-assignment -- the Gio typings name GLib's enum separately
+                stream.seek(offset, GLib.SeekType.SET, null);
+            };
+            seekTo(cursor.offset);
             for (;;) {
-                const [line, length] = stream.read_line_utf8(null);
+                let line: string | null;
+                let length: number;
+                try {
+                    [line, length] = stream.read_line_utf8(null);
+                } catch {
+                    seekTo(cursor.offset);
+                    const [bytes, byteLength] = stream.read_line(null);
+                    line = bytes === null ? null : new TextDecoder().decode(bytes); // Bad bytes become U+FFFD.
+                    length = byteLength;
+                }
                 if (line === null)
                     break;
                 // A last line without its newline yet is partial: leave it for the next read.

@@ -15,8 +15,44 @@ export const SESSION_EXPIRY: Record<SessionState, number> = {
 /** Most urgent first. */
 const PRIORITY: SessionState[] = ['needs-permission', 'waiting', 'working', 'finished', 'idle'];
 
-interface Tracked extends AgentSession {
+/** A session plus when it last had an event: what is saved across a restart. */
+export interface TrackedSession extends AgentSession {
     lastEventAt: number;
+}
+
+type Tracked = TrackedSession;
+
+const SNAPSHOT_VERSION = 1;
+const STATES = Object.keys(SESSION_EXPIRY) as SessionState[];
+
+export function encodeSessionSnapshot(sessions: TrackedSession[]): string {
+    return JSON.stringify({version: SNAPSHOT_VERSION, sessions});
+}
+
+/** Reads a saved snapshot; anything unexpected reads as no sessions, and bad entries are skipped. */
+export function decodeSessionSnapshot(text: string): TrackedSession[] {
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        return [];
+    }
+    if (typeof value !== 'object' || value === null || (value as {version?: unknown}).version !== SNAPSHOT_VERSION)
+        return [];
+    const list = (value as {sessions?: unknown}).sessions;
+    if (!Array.isArray(list))
+        return [];
+
+    const time = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+    const sessions: TrackedSession[] = [];
+    for (const item of list as unknown[]) {
+        if (typeof item !== 'object' || item === null)
+            continue;
+        const {sessionId, project, state, since, lastEventAt} = item as Record<string, unknown>;
+        if (typeof sessionId === 'string' && typeof project === 'string' && STATES.includes(state as SessionState) && time(since) && time(lastEventAt))
+            sessions.push({sessionId, project, state: state as SessionState, since, lastEventAt});
+    }
+    return sessions;
 }
 
 /** The state an event moves a session to, or null if the event says nothing about it. */
@@ -54,6 +90,19 @@ function nextState(event: AgentEvent): SessionState | null {
  */
 export class SessionTracker {
     private readonly sessions = new Map<string, Tracked>();
+
+    /** Every session with its last event time, for saving across a restart. */
+    snapshot(): TrackedSession[] {
+        return [...this.sessions.values()].map(session => ({...session}));
+    }
+
+    /** Loads a saved snapshot, dropping sessions that expired in the meantime. */
+    restore(sessions: TrackedSession[], now: number): void {
+        for (const session of sessions) {
+            if (now - session.lastEventAt < SESSION_EXPIRY[session.state])
+                this.sessions.set(session.sessionId, {...session});
+        }
+    }
 
     /** Applies an event; returns true if the list changed. */
     apply(event: AgentEvent, now: number): boolean {

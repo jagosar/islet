@@ -35,5 +35,9 @@ catch its failures.
   runners, and a nested Shell only processes input while its window is being painted (an
   occluded window's frame clock is throttled). The end-to-end suite is therefore run locally;
   `E2E_KEYBOARD=1` adds the keyboard checks and needs the window to stay visible.
-- **Lock-screen behaviour** is covered by simulating it at the daemon level (the daemon is killed
-  and restarted while events arrive); a real lock cycle is not automated.
+- **Lock-screen behaviour** is covered by simulating it at the daemon level (the daemon is stopped
+  while hooks fire, then started again: `tests/integration/lock.test.ts`); a real lock cycle is
+  not automated.
+- **Memory budget** (`tests/integration/performance.test.ts`): 120 MB of transcripts, daemon under
+  90 MB. The test was checked by mutation: the variant that broke the budget once (raw bytes per
+  line, 136 MB) fails it.
