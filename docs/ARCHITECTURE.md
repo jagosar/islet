@@ -143,9 +143,10 @@ work: no watchers, no timers, no processes.
   the first response of a session; either window may be absent.
 - `islet-statusline` forwards those numbers to the daemon and then runs the user's previous
   status line command (if any) and prints its output unchanged, so nothing visible changes.
-- **Unverified:** whether the VS Code extension and the desktop app run the status line. The
-  docs only describe the terminal. If they do not, the UI says "plan usage comes from terminal
-  sessions" and shows when the figure was last measured. *(spike)*
+- **Spike S4:** the desktop app does **not** run the status line; the terminal does; VS Code is
+  still to be checked. So plan usage only refreshes while a terminal session is active. The UI
+  must say "plan usage comes from terminal sessions" and show when the figure was last measured,
+  and the compact capsule should not lead with a stale percentage.
 - Never computed from token counts. Never read from the OAuth token or undocumented endpoints.
 
 **Claude Code — live agent activity** (the most useful feature)
@@ -161,8 +162,18 @@ work: no watchers, no timers, no processes.
 - **Verified in spike S3** with real payloads against the nested Shell: `Notification` and
   `Stop` arrive as `AgentEvent`; `last_assistant_message` and `message` never leave the hook;
   invalid input is dropped; with Islet down the hook still exits 0, silently, in ~60 ms.
-  Still to check by hand: events from the terminal CLI, the desktop app and VS Code
-  (`dev/hook-playground`).
+- **Real entry points (2026-10-16):**
+
+  | Entry point | Hooks (`Notification`, `Stop`) | Status line (plan usage) |
+  |---|---|---|
+  | Desktop app (`claude-desktop`) | ✓ both, after the stdin fix below | ✗ never runs |
+  | Terminal CLI (`cli`) | not yet verified (login had expired) | ✓ runs |
+  | VS Code (`claude-vscode`) | not yet verified | not yet verified |
+
+  **Bug found:** the desktop app passes hook input through a socket; opening `/dev/stdin` on a
+  socket fails with ENXIO, so every desktop event was dropped. The bridge reads fd 0 instead.
+  **Consequence for plan usage:** the status line is not a reliable source for people who work
+  in the desktop app; see §5.
 
 **Media**: MPRIS over D-Bus (any player: Spotify, browsers, Rhythmbox…). Title, artist, art,
 play/pause, previous/next, seek where supported. The playing player wins; a closed player clears.
