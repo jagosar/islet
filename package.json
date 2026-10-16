@@ -9,7 +9,9 @@
     "build": "rm -rf dist && tsc && cp src/metadata.json src/stylesheet.css dist/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:gjs": "npm run build && gjs -m tests/gjs/smoke.js",
     "lint": "eslint .",
+    "pack": "npm run build && rm -f islet@jagosar.github.io.zip && cd dist && zip -qr ../islet@jagosar.github.io.zip .",
     "nested": "npm run build && scripts/nested.sh"
   },
   "devDependencies": {
