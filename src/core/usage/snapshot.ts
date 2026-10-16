@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import type {UsageSnapshot} from '../protocol.js';
 import type {ModelTotals} from './aggregator.js';
 import {freshTokens} from './claudeTranscript.js';

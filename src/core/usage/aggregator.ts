@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import type {TokenCounts, UsageRecord} from './claudeTranscript.js';
 
 export type ModelTotals = Map<string, TokenCounts>;

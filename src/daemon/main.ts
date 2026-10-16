@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // islet-daemon: run by the extension as `gjs -m daemon/main.js`.
 //
 // Lifecycle rules (no orphans, newest wins):

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Development only: runs the status line bridge against the nested Shell's D-Bus session (see
 # nested.sh), passing its arguments through. Used by dev/hook-playground.
 

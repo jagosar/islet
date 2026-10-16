@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /** The plan figures in Claude Code's status line input, as ReportPlanUsage fields. */
 export type PlanReport = Record<string, number>;
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import GioUnix from 'gi://GioUnix';
 
 const MAX_INPUT_BYTES = 8 * 1024 * 1024;

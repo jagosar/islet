@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /** Token counts as the API bills them. Thinking tokens are already part of `output`. */
 export interface TokenCounts {
     input: number;

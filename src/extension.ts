@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -264,7 +265,7 @@ export default class IsletExtension extends Extension {
      * packaged extension, so release installs never load this.
      */
     private startDevDebug(): void {
-        if (!GLib.getenv('ISLET_DEV_DEBUG'))
+        if (!GLib.getenv('ISLET_DEV_DEBUG') || !GLib.file_test(`${this.path}/dev/debugService.js`, GLib.FileTest.EXISTS))
             return;
         import('./dev/debugService.js')
             .then(({DebugService}) => {

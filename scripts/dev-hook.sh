@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Development only: runs the hook bridge against the nested Shell's D-Bus session (written by
 # nested.sh), so Claude Code sessions can be tested without enabling Islet in the real session.
 # Like the bridge itself, it always exits 0.

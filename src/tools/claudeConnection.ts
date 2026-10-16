@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 // islet-claude: connects Islet to Claude Code, or disconnects it, from the command line.
 // Used by the uninstaller so Claude Code is left exactly as it was.
 //
