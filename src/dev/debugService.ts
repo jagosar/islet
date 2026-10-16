@@ -2,6 +2,7 @@
 // this) and left out of the packaged extension by scripts/pack.sh. It lets scripts inspect the
 // capsule and take screenshots of the nested Shell, which has no other way in from outside.
 
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import Shell from 'gi://Shell';
 
@@ -19,6 +20,7 @@ const XML = `
     <method name="Screenshot"><arg type="s" name="path" direction="in"/></method>
     <method name="ToggleMenu"/>
     <method name="SelectPage"><arg type="s" name="id" direction="in"/></method>
+    <method name="PressKeys"><arg type="s" name="combo" direction="in"/></method>
   </interface>
 </node>`;
 
@@ -27,6 +29,13 @@ function box(actor: {get_transformed_position(): [number, number]; width: number
         return null;
     const [x] = actor.get_transformed_position();
     return {x: Math.round(x), width: Math.round(actor.width), center: Math.round(x + actor.width / 2)};
+}
+
+function describeFocus(actor: Clutter.Actor | null): string | null {
+    if (!actor)
+        return null;
+    const widget = actor as Clutter.Actor & {style_class?: string | null; label?: string | null};
+    return [actor.constructor.name, widget.style_class ?? '', widget.label ?? ''].join(':');
 }
 
 export class DebugService {
@@ -48,6 +57,7 @@ export class DebugService {
             available: this.capsule.isAvailable,
             menuOpen: Boolean(menu.isOpen),
             page: this.expanded.selectedPage,
+            keyFocus: describeFocus(global.stage.get_key_focus()),
             capsule: box(this.capsule.container),
             capsulePreferred: Math.round(this.capsule.container.get_preferred_width(-1)[1]),
             contentPreferred: Math.round(this.capsule.get_preferred_width(-1)[1]),
@@ -76,6 +86,17 @@ export class DebugService {
 
     SelectPage(id: string): void {
         this.expanded.select(id);
+    }
+
+    /** Presses and releases keys like "Control_L+Alt_L+space" through a virtual keyboard. */
+    PressKeys(combo: string): void {
+        const keyboard = Clutter.get_default_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+        const keyvals = combo.split('+').map(name => (Clutter as unknown as Record<string, number>)[`KEY_${name}`]);
+        let time = Math.floor(global.get_current_time() * 1000);
+        for (const keyval of keyvals)
+            keyboard.notify_keyval(time++, keyval, Clutter.KeyState.PRESSED);
+        for (const keyval of [...keyvals].reverse())
+            keyboard.notify_keyval(time++, keyval, Clutter.KeyState.RELEASED);
     }
 
     stop(): void {

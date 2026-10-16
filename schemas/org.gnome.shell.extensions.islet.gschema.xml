@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="islet">
+  <schema id="org.gnome.shell.extensions.islet" path="/org/gnome/shell/extensions/islet/">
+    <key name="toggle-island" type="as">
+      <default><![CDATA[['<Control><Alt>space']]]></default>
+      <summary>Open or close the island</summary>
+      <description>Keyboard shortcut that opens or closes the expanded island.</description>
+    </key>
+  </schema>
+</schemalist>
