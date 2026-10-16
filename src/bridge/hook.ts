@@ -21,6 +21,9 @@ try {
             new GLib.Variant('(a{ss})', [fields]), null,
             Gio.DBusCallFlags.NO_AUTO_START, CALL_TIMEOUT_MS, null);
     }
-} catch {
-    // Islet is not running or the input was unexpected: nothing to report.
+} catch (error) {
+    // Islet is not running or the input was unexpected: nothing to report. Development tools
+    // set ISLET_HOOK_DEBUG to see why; stderr is not shown to Claude for an exit code of 0.
+    if (GLib.getenv('ISLET_HOOK_DEBUG'))
+        printerr(`islet-hook: ${error}`);
 }
