@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.2 — 2026-10-17
+
+Ready for extensions.gnome.org review; no change in behaviour.
+
+### Changed
+
+- The packaged extension no longer contains development hooks (the debug service and the
+  environment switches used by the end-to-end tests): they are marked in the source and stripped
+  when packaging, and a package test checks the result.
+- One informational log line less; only warnings and errors are logged.
+
+### Quality
+
+- Package tests check the extensions.gnome.org import rules (no `Gtk`, `Gdk` or `Adw` in the Shell
+  process, no `Clutter`, `Meta`, `St` or `Shell` in preferences) and that the stripped JavaScript
+  is valid.
+- Dependabot no longer proposes TypeScript major updates until typescript-eslint supports
+  TypeScript 7 (it refuses to run on it today).
+- Maintainers can enable a hook that keeps personal emails out of the public history
+  (`npm run hooks`).
+
 ## 0.1.1 — 2026-10-17
 
 A security fix and the robustness fixes from the first code audit. Upgrading is

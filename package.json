@@ -1,6 +1,6 @@
 {
   "name": "islet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "A small dynamic island for the GNOME top bar",
   "license": "GPL-2.0-or-later",
