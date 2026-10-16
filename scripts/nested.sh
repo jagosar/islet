@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Runs the built extension in a nested GNOME Shell (mutter-devkit window).
 #
-# The nested Shell gets its own XDG config, data, cache and state directories under .devkit/
-# and its own D-Bus session, so enabling the extension here never changes the real session.
+# The nested Shell gets its own XDG config, data, cache and state directories and its own D-Bus
+# session, so enabling the extension here never changes the real session.
+#
+# The sandbox lives in the runtime directory, not in the repository: services in the nested
+# session (IBus, for one) create Unix sockets under XDG_CACHE_HOME, and a socket path longer
+# than 108 bytes cannot be bound, so a deep checkout path makes them crash.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 uuid="$(node -p "JSON.parse(require('fs').readFileSync('$root/dist/metadata.json', 'utf8')).uuid")"
-sandbox="$root/.devkit"
+sandbox="${XDG_RUNTIME_DIR:-/tmp}/islet-devkit"
 
 mkdir -p "$sandbox/config" "$sandbox/cache" "$sandbox/state" "$sandbox/data/gnome-shell/extensions"
 ln -sfn "$root/dist" "$sandbox/data/gnome-shell/extensions/$uuid"

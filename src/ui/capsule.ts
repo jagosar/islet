@@ -27,7 +27,8 @@ export class Capsule extends PanelMenu.Button {
     private mirror: Clutter.Actor | null = null;
     private liveTimeoutId = 0;
 
-    constructor() {
+    /** `onSimulate` is a spike hook: the menu item sends a fake agent event through the daemon. */
+    constructor(onSimulate: () => void) {
         super(0.5, 'Islet', false);
 
         this.pill = new St.BoxLayout({
@@ -48,8 +49,8 @@ export class Capsule extends PanelMenu.Button {
         this.add_child(this.pill);
 
         if (this.menu instanceof PopupMenu.PopupMenu) {
-            const simulate = new PopupMenu.PopupMenuItem(_('Simulate live activity'));
-            simulate.connect('activate', () => this.showLiveActivity(_('islet needs your permission')));
+            const simulate = new PopupMenu.PopupMenuItem(_('Simulate agent event'));
+            simulate.connect('activate', onSimulate);
             this.menu.addMenuItem(simulate);
         }
 

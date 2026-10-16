@@ -80,6 +80,10 @@ Options evaluated:
 - **Lifecycle:** the extension starts the daemon with `Gio.Subprocess` in `enable()` and stops it
   in `disable()`. D-Bus name ownership guarantees a single instance. No systemd unit to install,
   nothing left behind on uninstall.
+- **Verified in spike S2** (nested Shell): disable stops the daemon; enable starts a new one; a
+  newer daemon takes the bus name (`ALLOW_REPLACEMENT | REPLACE`) and the old one exits; when the
+  Shell leaves the bus every daemon exits. Known gap: a daemon the extension did not start (e.g.
+  run by hand) survives `disable()` until the next `enable()` replaces it or the Shell exits.
 
 ### 3.3 Storage
 
