@@ -33,11 +33,11 @@ playing and a focus timer, right next to the clock. Local-first: no accounts, no
 
 ## Install
 
-1. Download `islet-0.1.0.tar.gz` from the [latest release](https://github.com/jagosar/islet/releases/latest).
+1. Download `islet-0.1.1.tar.gz` from the [latest release](https://github.com/jagosar/islet/releases/latest).
 2. In a terminal:
 
    ```bash
-   tar -xzf islet-0.1.0.tar.gz && cd islet-0.1.0 && ./install.sh
+   tar -xzf islet-0.1.1.tar.gz && cd islet-0.1.1 && ./install.sh
    ```
 
 3. Log out and back in. Islet appears next to the clock.

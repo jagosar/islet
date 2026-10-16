@@ -29,7 +29,7 @@ command -v gnome-extensions >/dev/null || fail "gnome-extensions was not found. 
 command -v gjs >/dev/null || fail "gjs was not found. Install it with: sudo apt install gjs"
 shell_version="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -n 1 || true)"
 if [ "$shell_version" != "50" ]; then
-    say "Warning: Islet 0.1.0 is built and tested for GNOME Shell 50; this is GNOME Shell ${shell_version:-unknown}."
+    say "Warning: Islet is built and tested for GNOME Shell 50; this is GNOME Shell ${shell_version:-unknown}."
     say "GNOME will not load it on other versions."
 fi
 [ -f "$here/$UUID.zip" ] || fail "$UUID.zip is missing next to install.sh."
@@ -60,8 +60,14 @@ if [ "$connect" = ask ] && [ -t 0 ]; then
     read -r -p "Connect Claude Code now? [y/N] " answer
     case "$answer" in [yY]*) connect=yes ;; *) connect=no ;; esac
 fi
-if [ "$connect" = yes ]; then
-    gjs -m "$extension_dir/tools/claudeConnection.js" connect
+tool="$extension_dir/tools/claudeConnection.js"
+if gjs -m "$tool" status 2>/dev/null | grep -q 'needs repair'; then
+    # An earlier version connected Claude Code and the connection is out of date (its commands
+    # changed, or Islet moved). Those entries are Islet's own and were agreed to before: update them.
+    gjs -m "$tool" repair
+    say "Restart any running Claude Code sessions to pick up the update."
+elif [ "$connect" = yes ]; then
+    gjs -m "$tool" connect
     say "Restart any running Claude Code sessions to pick up the hooks."
 else
     say "Claude Code not connected. You can connect it later in Islet's preferences."

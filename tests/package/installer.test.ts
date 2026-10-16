@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import {execFileSync, spawnSync} from 'node:child_process';
-import {chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -15,7 +15,7 @@ const UUID = 'islet@jagosar.github.io';
  */
 describe('install.sh and uninstall.sh', () => {
     let root: string;
-    let release: string;
+    let release = '';
 
     const write = (path: string, text: string) => {
         writeFileSync(path, text);
@@ -25,7 +25,6 @@ describe('install.sh and uninstall.sh', () => {
     beforeAll(() => {
         execFileSync('npm', ['run', '--silent', 'release'], {cwd: REPO});
         root = mkdtempSync(join(tmpdir(), 'islet-install-'));
-        release = join(root, 'islet-0.1.0');
         execFileSync('tar', ['-xzf', join(REPO, `islet-${(JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as {version: string}).version}.tar.gz`), '-C', root]);
         release = join(root, execFileSync('ls', [root], {encoding: 'utf8'}).split('\n').find(name => name.startsWith('islet-'))!);
 
@@ -119,6 +118,26 @@ esac
         const result = sh('install.sh', [], piped, 'y\n');
         expect(result.status).toBe(0);
         expect(result.stdout).toMatch(/Claude Code not connected/);
+    });
+
+    it('upgrades an out-of-date Claude Code connection on its own, and tightens an old backup', () => {
+        const e = env('upgrade');
+        const settings = join(e.CLAUDE_CONFIG_DIR!, 'settings.json');
+        // What 0.1.0 wrote: the older command format, recognised by the extension's folder name.
+        const oldHook = `sh -c 'f="$1"; [ -f "$f" ] && exec gjs -m "$f"; exit 0' islet '${join(e.XDG_DATA_HOME!, 'gnome-shell/extensions', UUID, 'bridge/hook.js')}'`;
+        const original = JSON.stringify({env: {ANTHROPIC_API_KEY: 'sk-test'}}, null, 2) + '\n';
+        writeFileSync(settings, JSON.stringify({env: {ANTHROPIC_API_KEY: 'sk-test'}, hooks: {Stop: [{hooks: [{type: 'command', command: oldHook, timeout: 5}]}]}}, null, 2));
+        writeFileSync(`${settings}.islet-backup`, original);
+        chmodSync(`${settings}.islet-backup`, 0o664);
+
+        const result = sh('install.sh', ['--no'], e);
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toMatch(/Restart any running Claude Code sessions to pick up the update/);
+        const text = readFileSync(settings, 'utf8');
+        expect(text).toContain("islet-bridge");
+        expect(text).not.toContain("' islet '");
+        expect((text.match(/islet-bridge/g) ?? []).length).toBe(6); // Five hooks and the status line.
+        expect(statSync(`${settings}.islet-backup`).mode & 0o777).toBe(0o600);
     });
 
     it('fails clearly on an unknown option', () => {
