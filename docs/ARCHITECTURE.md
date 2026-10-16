@@ -156,7 +156,13 @@ work: no watchers, no timers, no processes.
   waiting), not only the last event.
 - `islet-hook` reads stdin, keeps a whitelist of fields (`session_id`, `cwd`, `hook_event_name`,
   notification type, `transcript_path`), calls the daemon over D-Bus with a 200 ms timeout,
-  prints nothing and **always exits 0**, so it can never block or alter Claude Code.
+  prints nothing and **always exits 0**, so it can never block or alter Claude Code. This
+  matters: a `Stop` hook that exits 2 keeps Claude from stopping.
+- **Verified in spike S3** with real payloads against the nested Shell: `Notification` and
+  `Stop` arrive as `AgentEvent`; `last_assistant_message` and `message` never leave the hook;
+  invalid input is dropped; with Islet down the hook still exits 0, silently, in ~60 ms.
+  Still to check by hand: events from the terminal CLI, the desktop app and VS Code
+  (`dev/hook-playground`).
 
 **Media**: MPRIS over D-Bus (any player: Spotify, browsers, Rhythmbox…). Title, artist, art,
 play/pause, previous/next, seek where supported. The playing player wins; a closed player clears.

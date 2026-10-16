@@ -21,8 +21,10 @@ export XDG_DATA_HOME="$sandbox/data"
 export XDG_CACHE_HOME="$sandbox/cache"
 export XDG_STATE_HOME="$sandbox/state"
 
+# The bus address is saved for scripts/dev-hook.sh, which sends Claude Code hook events here.
 exec dbus-run-session -- bash -c '
     gsettings set org.gnome.shell disable-user-extensions false
     gsettings set org.gnome.shell enabled-extensions "[\"$1\"]"
+    echo "$DBUS_SESSION_BUS_ADDRESS" > "$2/bus-address"
     exec gnome-shell --devkit --wayland
-' nested "$uuid"
+' nested "$uuid" "$sandbox"
