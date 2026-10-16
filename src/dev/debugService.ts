@@ -8,6 +8,7 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import type {Capsule} from '../ui/capsule.js';
+import type {ExpandedView} from '../ui/expandedView.js';
 
 const BUS_NAME = 'io.github.jagosar.IsletDebug';
 const OBJECT_PATH = '/io/github/jagosar/IsletDebug';
@@ -17,6 +18,7 @@ const XML = `
     <method name="State"><arg type="s" direction="out"/></method>
     <method name="Screenshot"><arg type="s" name="path" direction="in"/></method>
     <method name="ToggleMenu"/>
+    <method name="SelectPage"><arg type="s" name="id" direction="in"/></method>
   </interface>
 </node>`;
 
@@ -31,7 +33,7 @@ export class DebugService {
     private readonly exported: Gio.DBusExportedObject;
     private readonly ownerId: number;
 
-    constructor(private readonly capsule: Capsule) {
+    constructor(private readonly capsule: Capsule, private readonly expanded: ExpandedView) {
         this.exported = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this.exported.export(Gio.DBus.session, OBJECT_PATH);
         this.ownerId = Gio.bus_own_name_on_connection(Gio.DBus.session, BUS_NAME, Gio.BusNameOwnerFlags.REPLACE, null, null);
@@ -45,6 +47,7 @@ export class DebugService {
             live: this.capsule.isLive,
             available: this.capsule.isAvailable,
             menuOpen: Boolean(menu.isOpen),
+            page: this.expanded.selectedPage,
             capsule: box(this.capsule.container),
             capsulePreferred: Math.round(this.capsule.container.get_preferred_width(-1)[1]),
             contentPreferred: Math.round(this.capsule.get_preferred_width(-1)[1]),
@@ -69,6 +72,10 @@ export class DebugService {
 
     ToggleMenu(): void {
         this.capsule.menu.toggle();
+    }
+
+    SelectPage(id: string): void {
+        this.expanded.select(id);
     }
 
     stop(): void {

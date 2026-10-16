@@ -219,11 +219,19 @@ work: no watchers, no timers, no processes.
   **Consequence for plan usage:** the status line is not a reliable source for people who work
   in the desktop app; see §5.
 
-**Media**: MPRIS over D-Bus (any player: Spotify, browsers, Rhythmbox…). Title, artist, art,
-play/pause, previous/next, seek where supported. The playing player wins; a closed player clears.
+**Media**: any MPRIS player (Spotify, browsers, Rhythmbox…). Title, artist, local artwork,
+play/pause, previous/next. The playing player wins; a closed player clears. A new song raises a
+live activity. *Implemented in the extension, not the daemon:* it is event-driven D-Bus work with
+no CPU cost, and the Shell's own MPRIS client cannot be torn down in `disable()`, so Islet has a
+small one that can. No timeline or seeking in v1 (it needs position polling).
 
-**Focus**: 25 / 50 / 90 min and custom; pause, resume, stop; countdown in the capsule; survives a
-restart; daily history (today and 7 days).
+**Focus**: 25 / 50 / 90 min presets; pause, resume, stop; countdown in the capsule (one tick
+per second only while running); survives a restart (`$XDG_STATE_HOME/islet/focus.json`, written
+asynchronously) and completes a session that ended while the Shell was not running; history for
+today and the last 7 days. Stopping early counts the minutes but not a session.
+
+**Compact precedence**: Claude sessions that need you, a focus session, Claude usage, what is
+playing, then plain "Claude".
 
 ### Later
 

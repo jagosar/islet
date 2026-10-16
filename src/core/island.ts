@@ -4,6 +4,7 @@
  */
 import {describeAgentEvent, type AgentEvent} from './agentEvents.js';
 import {compactClaudeText} from './compact.js';
+import {formatCountdown} from './focus.js';
 import type {AgentSession, PlanUsage, UsageSnapshot} from './protocol.js';
 
 export type Tone = 'normal' | 'attention' | 'muted';
@@ -20,10 +21,17 @@ export interface IslandInput {
     sessions: AgentSession[];
     /** Unix epoch seconds. */
     now: number;
+    /** A focus session in progress, if any. */
+    focus?: {remainingS: number; paused: boolean} | null;
+    /** The track shown when nothing else has news: "Title — Artist" while playing. */
+    nowPlaying?: string | null;
 }
 
 type Translate = (text: string) => string;
 const identity: Translate = text => text;
+
+/** What compactClaudeText shows without any data. */
+const CLAUDE_IDLE = 'Claude';
 
 /** Sessions that wait for the user, most urgent first (the list is already sorted). */
 export function sessionsNeedingYou(sessions: AgentSession[]): AgentSession[] {
@@ -31,14 +39,12 @@ export function sessionsNeedingYou(sessions: AgentSession[]): AgentSession[] {
 }
 
 /**
- * The compact capsule. Order of precedence: sessions that need the user (they stay until the
- * session moves on), then Claude usage.
+ * The compact capsule. Order of precedence: Claude sessions that need the user (they stay until
+ * the session moves on), a focus session, Claude usage, what is playing, and finally "Claude".
+ * Focus and music work without the daemon; Claude data needs it.
  */
 export function compactView(input: IslandInput, t: Translate = identity): CompactView {
-    if (!input.available)
-        return {text: compactClaudeText(null, null, input.now), tone: 'muted'};
-
-    const needing = sessionsNeedingYou(input.sessions);
+    const needing = input.available ? sessionsNeedingYou(input.sessions) : [];
     if (needing.length > 1)
         return {text: t('%d sessions need you').replace('%d', String(needing.length)), tone: 'attention'};
     if (needing.length === 1) {
@@ -46,7 +52,20 @@ export function compactView(input: IslandInput, t: Translate = identity): Compac
         const text = session.state === 'needs-permission' ? t('%s needs permission') : t('%s is waiting');
         return {text: text.replace('%s', session.project), tone: 'attention'};
     }
-    return {text: compactClaudeText(input.usage, input.plan, input.now), tone: 'normal'};
+
+    if (input.focus) {
+        const countdown = formatCountdown(input.focus.remainingS);
+        return input.focus.paused
+            ? {text: t('Focus paused · %s').replace('%s', countdown), tone: 'muted'}
+            : {text: t('Focus %s').replace('%s', countdown), tone: 'normal'};
+    }
+
+    const claude = input.available ? compactClaudeText(input.usage, input.plan, input.now) : CLAUDE_IDLE;
+    if (claude !== CLAUDE_IDLE)
+        return {text: claude, tone: 'normal'};
+    if (input.nowPlaying)
+        return {text: `♪ ${input.nowPlaying}`, tone: 'normal'};
+    return {text: CLAUDE_IDLE, tone: input.available ? 'normal' : 'muted'};
 }
 
 /** The live activity for an agent event, or null for events that should not interrupt. */
