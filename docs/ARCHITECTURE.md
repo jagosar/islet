@@ -134,6 +134,13 @@ work: no watchers, no timers, no processes.
 - Metrics as in the original: input, cache write, output, cache read; **fresh** = input + cache
   write + output; **processed** = fresh + cache read. Subagent (`isSidechain`) usage is included.
 - Unknown usage fields (e.g. `iterations`) are ignored and logged once, never guessed.
+- **Verified in spike S5:** de-duplicated by `message.id` across all transcript files (a resumed
+  session copies earlier responses), the totals match the `cost-state.modelUsage` Claude Code
+  writes when a session ends, exactly, in all four categories. `output_tokens` already includes
+  thinking tokens (`output_tokens_details.thinking_tokens`), so they are not added again.
+  Responses with model `<synthetic>` are local messages and are skipped. Days are local days
+  (`Intl` with the system time zone; works in GJS). `scripts/usage-report.mjs` repeats the
+  comparison on any machine.
 - No API-equivalent cost in v1: on a subscription it is misleading and the price table is a
   maintenance burden.
 
