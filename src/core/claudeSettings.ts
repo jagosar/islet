@@ -10,8 +10,15 @@
  * generated commands do nothing harmful if Islet is uninstalled without disconnecting.
  */
 
-/** Every command Islet adds contains this path fragment, and no other command does. */
+/**
+ * What marks a command as Islet's. Version 0.1.0 recognised its commands by this path fragment,
+ * which only holds when the extension sits in a folder named after its UUID; those commands are
+ * still recognised (and upgraded by repair).
+ */
 export const BRIDGE_MARKER = 'islet@jagosar.github.io/bridge/';
+
+/** Islet's commands run `sh -c '…' islet-bridge '<script>'`: this name, as $0, marks them wherever the extension is. */
+const COMMAND_TAG = " islet-bridge '";
 
 export const HOOK_EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'Stop', 'Notification'] as const;
 const HOOK_TIMEOUT_S = 5;
@@ -71,7 +78,7 @@ export function fromBase64(encoded: string): string {
  * and succeeds, so an uninstalled Islet never shows hook errors in Claude Code.
  */
 export function hookCommand(hookScript: string): string {
-    return `sh -c 'f="$1"; [ -f "$f" ] && exec gjs -m "$f"; exit 0' islet ${shellQuote(hookScript)}`;
+    return `sh -c 'f="$1"; [ -f "$f" ] && exec gjs -m "$f"; exit 0'${COMMAND_TAG}${shellQuote(hookScript).slice(1)}`;
 }
 
 /**
@@ -81,17 +88,18 @@ export function hookCommand(hookScript: string): string {
 export function statusLineCommand(statusLineScript: string, previousCommand: string | null): string {
     const previous = previousCommand ? toBase64(previousCommand) : '';
     return `sh -c 'f="$1"; p="$2"; [ -f "$f" ] && exec gjs -m "$f" "$p"; [ -n "$p" ] && exec sh -c "$(printf %s "$p" | base64 -d)"; exit 0' ` +
-        `islet ${shellQuote(statusLineScript)} ${shellQuote(previous)}`;
+        `${COMMAND_TAG.trimStart()}${shellQuote(statusLineScript).slice(1)} ${shellQuote(previous)}`;
 }
 
 /** The previous command chained in one of Islet's status line commands, or null. */
 export function chainedPreviousCommand(command: string): string | null {
-    const match = /' islet '[^']*' '([A-Za-z0-9+/=]*)'$/.exec(command);
+    const match = /' islet(?:-bridge)? '[^']*' '([A-Za-z0-9+/=]*)'$/.exec(command);
     return match && match[1] ? fromBase64(match[1]) : null;
 }
 
 function isOurs(entry: unknown): boolean {
-    return isObject(entry) && typeof entry.command === 'string' && entry.command.includes(BRIDGE_MARKER);
+    return isObject(entry) && typeof entry.command === 'string' &&
+        (entry.command.includes(BRIDGE_MARKER) || entry.command.includes(COMMAND_TAG));
 }
 
 function parse(text: string | null): Json {
@@ -115,24 +123,51 @@ function serialize(settings: Json): string {
 export interface ConnectionStatus {
     hooks: boolean;
     statusLine: boolean;
-}
-
-export function connectionStatus(text: string | null): ConnectionStatus {
-    let settings: Json;
-    try {
-        settings = parse(text);
-    } catch {
-        return {hooks: false, statusLine: false};
-    }
-    const hooks = isObject(settings.hooks) ? settings.hooks : {};
-    const hasHook = Object.values(hooks).some(groups => Array.isArray(groups) &&
-        groups.some(group => isObject(group) && Array.isArray(group.hooks) && group.hooks.some(isOurs)));
-    return {hooks: hasHook, statusLine: isOurs(settings.statusLine)};
+    /**
+     * Connected, but not as the current version would connect: the extension moved (the commands
+     * would silently do nothing), an event is missing, or the commands are from an older version.
+     * Only known when the current scripts are given.
+     */
+    stale: boolean;
 }
 
 export interface BridgeScripts {
     hook: string;
     statusLine: string;
+}
+
+function groupsOf(settings: Json, event: string): unknown[] {
+    const hooks = isObject(settings.hooks) ? settings.hooks : {};
+    const groups = hooks[event];
+    return Array.isArray(groups) ? groups as unknown[] : [];
+}
+
+function ourHooks(settings: Json, event: string): Json[] {
+    return groupsOf(settings, event)
+        .flatMap(group => (isObject(group) && Array.isArray(group.hooks) ? group.hooks as unknown[] : []))
+        .filter(isOurs) as Json[];
+}
+
+export function connectionStatus(text: string | null, scripts?: BridgeScripts): ConnectionStatus {
+    let settings: Json;
+    try {
+        settings = parse(text);
+    } catch {
+        return {hooks: false, statusLine: false, stale: false};
+    }
+    const hooks = Object.keys(isObject(settings.hooks) ? settings.hooks : {}).some(event => ourHooks(settings, event).length > 0);
+    const statusLine = isOurs(settings.statusLine);
+    if (!scripts || (!hooks && !statusLine))
+        return {hooks, statusLine, stale: false};
+
+    const expectedHook = hookCommand(scripts.hook);
+    const hooksCurrent = HOOK_EVENTS.every(event => {
+        const ours = ourHooks(settings, event);
+        return ours.length === 1 && ours[0].command === expectedHook;
+    });
+    const statusLineCurrent = statusLine && (settings.statusLine as Json).command ===
+        statusLineCommand(scripts.statusLine, chainedPreviousCommand((settings.statusLine as Json).command as string));
+    return {hooks, statusLine, stale: !(hooksCurrent && statusLineCurrent)};
 }
 
 /** The entries connect() adds, for showing them to the user before connecting. */
@@ -171,6 +206,14 @@ export function connectSettings(text: string | null, scripts: BridgeScripts): st
         hooks,
         statusLine: status.statusLine ? settings.statusLine : planned.statusLine,
     });
+}
+
+/**
+ * Makes the connection current: removes Islet's entries (restoring the previous status line)
+ * and adds them again for these scripts. Everything that is not Islet's is untouched.
+ */
+export function repairSettings(text: string | null, scripts: BridgeScripts): string {
+    return connectSettings(text === null ? null : disconnectSettings(text), scripts);
 }
 
 /**

@@ -4,7 +4,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {
-    FOCUS_HISTORY_DAYS, completeIfDue, decodeFocusState, initialFocusState, pause, pruneHistory, resume, start, stop,
+    FOCUS_HISTORY_DAYS, lastDays, completeIfDue, decodeFocusState, initialFocusState, pause, pruneHistory, resume, start, stop,
     type FocusState,
 } from '../core/focus.js';
 import {formatLocal} from './localTime.js';
@@ -17,9 +17,9 @@ function localDay(epochSeconds: number): string {
     return formatLocal(epochSeconds, '%Y-%m-%d');
 }
 
-/** Today and the days before it that the history keeps. */
+/** Today and the days before it that the history keeps, by calendar (see lastDays). */
 export function keptDays(now: number): string[] {
-    return Array.from({length: FOCUS_HISTORY_DAYS}, (_, i) => localDay(now - i * 86400));
+    return lastDays(localDay(now), FOCUS_HISTORY_DAYS);
 }
 
 /**

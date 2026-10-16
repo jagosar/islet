@@ -2,16 +2,13 @@
 
 import type {UsageSnapshot} from '../protocol.js';
 import type {ModelTotals} from './aggregator.js';
+import {daysBefore} from '../days.js';
 import {freshTokens} from './claudeTranscript.js';
 
 /** 26 weeks, the span of the usage graph. */
 export const HISTORY_DAYS = 26 * 7;
 
-/** YYYY-MM-DD, `days` days before `day` (calendar arithmetic, no time zone involved). */
-export function daysBefore(day: string, days: number): string {
-    const [year, month, date] = day.split('-').map(Number);
-    return new Date(Date.UTC(year, month - 1, date - days)).toISOString().slice(0, 10);
-}
+export {daysBefore};
 
 /**
  * The Usage document: today's totals per model and fresh tokens for each day with usage in the

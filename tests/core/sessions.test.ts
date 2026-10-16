@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, it} from 'vitest';
 import type {AgentEvent} from '../../src/core/agentEvents.js';
-import {SESSION_EXPIRY, SessionTracker, decodeSessionSnapshot, encodeSessionSnapshot} from '../../src/core/sessions.js';
+import {MAX_SESSIONS, SESSION_EXPIRY, SessionTracker, decodeSessionSnapshot, encodeSessionSnapshot} from '../../src/core/sessions.js';
 
 function event(hookEventName: string, notificationType?: string, sessionId = 'a', cwd = '/home/me/code/islet'): AgentEvent {
     return notificationType ? {sessionId, cwd, hookEventName, notificationType} : {sessionId, cwd, hookEventName};
@@ -107,6 +107,24 @@ describe('SessionTracker', () => {
             ]});
             expect(decodeSessionSnapshot(text).map(s => s.sessionId)).toEqual(['ok']);
         });
+    });
+
+    it('keeps at most MAX_SESSIONS, forgetting the one that was quiet the longest', () => {
+        for (let i = 0; i < MAX_SESSIONS + 10; i++)
+            tracker.apply(event('UserPromptSubmit', undefined, `s${i}`), 1000 + i);
+        const ids = tracker.list().map(s => s.sessionId);
+        expect(ids).toHaveLength(MAX_SESSIONS);
+        expect(ids).not.toContain('s0');
+        expect(ids).toContain(`s${MAX_SESSIONS + 9}`);
+    });
+
+    it('does not evict a session that is only updated', () => {
+        for (let i = 0; i < MAX_SESSIONS; i++)
+            tracker.apply(event('UserPromptSubmit', undefined, `s${i}`), 1000 + i);
+        tracker.apply(event('Notification', 'permission_prompt', 's0'), 5000); // The oldest one speaks again.
+        tracker.apply(event('UserPromptSubmit', undefined, 'extra'), 5001);
+        expect(tracker.list().map(s => s.sessionId)).toContain('s0');
+        expect(tracker.list().map(s => s.sessionId)).not.toContain('s1');
     });
 
     it('has no expiry when empty', () => {

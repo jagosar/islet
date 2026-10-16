@@ -6,6 +6,8 @@
  * Shell was not running is completed on the next read.
  */
 
+export {lastDays} from './days.js';
+
 export const FOCUS_PRESETS_MIN = [25, 50, 90] as const;
 /** Days of history kept (today and the six before it). */
 export const FOCUS_HISTORY_DAYS = 7;

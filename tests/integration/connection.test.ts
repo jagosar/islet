@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import {spawnSync} from 'node:child_process';
-import {chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {Sandbox, sessionsOf, waitFor} from './harness.js';
+import {DIST, Sandbox, sessionsOf, waitFor} from './harness.js';
 
 describe('Claude Code connection (tools/claudeConnection.js)', () => {
     let sandbox: Sandbox;
@@ -96,6 +96,47 @@ describe('Claude Code connection (tools/claudeConnection.js)', () => {
         expect(existsSync(settings)).toBe(true);
         expect(cli('disconnect').status).toBe(0);
         expect(existsSync(settings)).toBe(false);
+    });
+
+    describe('a connection whose extension moved', () => {
+        const elsewhere = () => join(sandbox.root, 'elsewhere', 'islet@jagosar.github.io');
+        const cliAt = (dir: string, command: string) =>
+            spawnSync('gjs', ['-m', join(dir, 'tools/claudeConnection.js'), command], {env: sandbox.env(), encoding: 'utf8', timeout: 30_000});
+
+        it('is reported as needing repair, and repair points it at the new place, keeping everything else', () => {
+            const withLine = JSON.stringify({theme: 'dark', statusLine: {type: 'command', command: 'printf mine'}}, null, 2) + '\n';
+            writeFileSync(settings, withLine);
+            rmSync(`${settings}.islet-backup`, {force: true});
+            expect(cli('connect').status).toBe(0);
+            expect(cli('status').stdout).not.toContain('needs repair');
+
+            mkdirSync(join(sandbox.root, 'elsewhere'), {recursive: true});
+            symlinkSync(DIST, elsewhere());
+            const status = cliAt(elsewhere(), 'status');
+            expect(status.stdout).toContain('needs repair');
+
+            expect(cliAt(elsewhere(), 'repair').status).toBe(0);
+            const repaired = readFileSync(settings, 'utf8');
+            expect(repaired).toContain(join('elsewhere', 'islet@jagosar.github.io', 'bridge', 'hook.js'));
+            expect(repaired).not.toContain(join(sandbox.extensionDir, 'bridge', 'hook.js'));
+            expect(cliAt(elsewhere(), 'status').stdout).not.toContain('needs repair');
+            expect((JSON.parse(repaired) as {theme: string}).theme).toBe('dark');
+
+            // Disconnecting afterwards, from either place, still gives the user's file back.
+            expect(cliAt(elsewhere(), 'disconnect').status).toBe(0);
+            expect(readFileSync(settings, 'utf8')).toBe(withLine);
+        });
+
+        it('repair on a file that was never connected just connects, and repair is idempotent', () => {
+            writeFileSync(settings, original);
+            rmSync(`${settings}.islet-backup`, {force: true});
+            expect(cli('repair').status).toBe(0);
+            const once = readFileSync(settings, 'utf8');
+            expect(cli('repair').status).toBe(0);
+            expect(readFileSync(settings, 'utf8')).toBe(once);
+            expect(cli('disconnect').status).toBe(0);
+            expect(readFileSync(settings, 'utf8')).toBe(original);
+        });
     });
 
     describe('permissions (settings.json may hold API keys in env)', () => {

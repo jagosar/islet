@@ -15,6 +15,8 @@ const SLICE_MS = 20;
 const DEBOUNCE_MS = 300;
 /** While ~/.claude/projects does not exist yet, look for it this often. */
 const MISSING_ROOT_RETRY_S = 300;
+/** Days kept beyond the 26 weeks shown, so a late-written old response still lands somewhere. */
+const PRUNE_MARGIN_DAYS = 7;
 
 interface Cursor {
     inode: string;
@@ -51,6 +53,7 @@ export class UsageModule {
     private midnightId = 0;
     private retryId = 0;
     private published = '';
+    private lastPruneDay = '';
 
     constructor(
         private readonly service: IsletService,
@@ -238,6 +241,11 @@ export class UsageModule {
 
     private publish(): void {
         const today = dayKey(new Date().toISOString(), this.timeZone);
+        if (today !== this.lastPruneDay) {
+            // Once a day, and at the first publish after the initial scan: forget what no view shows.
+            this.aggregator.prune(today, HISTORY_DAYS + PRUNE_MARGIN_DAYS);
+            this.lastPruneDay = today;
+        }
         const snapshot = buildUsageSnapshot(this.aggregator.byDay(), today);
         const text = JSON.stringify(snapshot);
         if (text === this.published)

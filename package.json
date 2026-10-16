@@ -9,7 +9,7 @@
     "build": "rm -rf dist && tsc && cp src/metadata.json src/stylesheet.css dist/ && mkdir -p dist/schemas && cp schemas/*.gschema.xml dist/schemas/ && glib-compile-schemas --strict dist/schemas",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:gjs": "npm run build && gjs -m tests/gjs/smoke.js",
+    "test:gjs": "npm run build && gjs -m tests/gjs/smoke.js && TZ=Europe/Berlin gjs -m tests/gjs/dst.js",
     "lint": "eslint .",
     "pack": "npm run build && scripts/pack.sh",
     "nested": "npm run build && scripts/nested.sh",

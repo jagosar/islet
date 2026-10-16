@@ -1,6 +1,7 @@
 import {spawnSync} from 'node:child_process';
 import {describe, expect, it} from 'vitest';
 import {
+    repairSettings,
     BRIDGE_MARKER, HOOK_EVENTS, SettingsError, chainedPreviousCommand, connectSettings, connectionStatus,
     disconnectSettings, fromBase64, hookCommand, plannedEntries, sameSettings, shellQuote, statusLineCommand, toBase64,
 } from '../../src/core/claudeSettings.js';
@@ -55,7 +56,7 @@ describe('connectSettings', () => {
         const settings = JSON.parse(connectSettings(null, scripts));
         expect(Object.keys(settings.hooks)).toEqual([...HOOK_EVENTS]);
         expect(settings.statusLine.command).toContain(BRIDGE_MARKER);
-        expect(connectionStatus(JSON.stringify(settings))).toEqual({hooks: true, statusLine: true});
+        expect(connectionStatus(JSON.stringify(settings))).toEqual({hooks: true, statusLine: true, stale: false});
     });
 
     it('keeps every other key and the user\'s own hooks', () => {
@@ -106,7 +107,7 @@ describe('disconnectSettings', () => {
     ])('connect then disconnect restores %s', (_name, original) => {
         const restored = disconnectSettings(connectSettings(original, scripts));
         expect(sameSettings(restored, original ?? '{}')).toBe(true);
-        expect(connectionStatus(restored)).toEqual({hooks: false, statusLine: false});
+        expect(connectionStatus(restored)).toEqual({hooks: false, statusLine: false, stale: false});
         if (original)
             expect(restored).toBe(original);
     });
@@ -124,9 +125,81 @@ describe('disconnectSettings', () => {
     });
 });
 
+describe('stale connections and repair', () => {
+    const moved = {hook: '/opt/islet/bridge/hook.js', statusLine: '/opt/islet/bridge/statusline.js'};
+    const parse = (text: string) => JSON.parse(text) as {hooks: Record<string, {hooks: {command: string}[]}[]>; statusLine: {command: string}; theme?: string};
+
+    it('is not stale when the paths and events are current', () => {
+        const connected = connectSettings('{}', scripts);
+        expect(connectionStatus(connected, scripts)).toEqual({hooks: true, statusLine: true, stale: false});
+    });
+
+    it('is stale when the extension moved: the commands would silently do nothing', () => {
+        const connected = connectSettings('{}', scripts);
+        expect(connectionStatus(connected, moved)).toEqual({hooks: true, statusLine: true, stale: true});
+    });
+
+    it('is stale when an event is missing (a newer version listens to more)', () => {
+        const connected = parse(connectSettings('{}', scripts));
+        delete connected.hooks.SessionEnd;
+        expect(connectionStatus(JSON.stringify(connected), scripts).stale).toBe(true);
+    });
+
+    it('is not stale without a connection, or without scripts to compare with', () => {
+        expect(connectionStatus('{}', scripts).stale).toBe(false);
+        expect(connectionStatus(connectSettings('{}', scripts)).stale).toBe(false);
+    });
+
+    it('repair points everything at the current paths, keeping the rest and the chained status line', () => {
+        const original = JSON.stringify({theme: 'dark', statusLine: {type: 'command', command: 'printf mine', padding: 1}, hooks: {Stop: [{hooks: [{type: 'command', command: '~/notify.sh'}]}]}});
+        const repaired = parse(repairSettings(connectSettings(original, scripts), moved));
+        expect(repaired.theme).toBe('dark');
+        expect(repaired.hooks.Stop).toHaveLength(2);
+        expect(repaired.hooks.Stop[0].hooks[0].command).toBe('~/notify.sh');
+        expect(JSON.stringify(repaired)).toContain(moved.hook);
+        expect(JSON.stringify(repaired)).not.toContain(scripts.hook);
+        expect(chainedPreviousCommand(repaired.statusLine.command)).toBe('printf mine');
+        expect(connectionStatus(JSON.stringify(repaired), moved)).toEqual({hooks: true, statusLine: true, stale: false});
+        // And disconnecting afterwards still restores what the user had.
+        expect(parse(disconnectSettings(JSON.stringify(repaired))).statusLine.command).toBe('printf mine');
+    });
+
+    it('repair is idempotent, and equals connect on a fresh file', () => {
+        const once = repairSettings(connectSettings('{}', scripts), moved);
+        expect(repairSettings(once, moved)).toBe(once);
+        expect(repairSettings('{}', scripts)).toBe(connectSettings('{}', scripts));
+    });
+
+    it('repair fills in a missing event', () => {
+        const damaged = parse(connectSettings('{}', scripts));
+        delete damaged.hooks.Notification;
+        const repaired = repairSettings(JSON.stringify(damaged), scripts);
+        expect(connectionStatus(repaired, scripts).stale).toBe(false);
+        expect(Object.keys(parse(repaired).hooks).sort()).toEqual([...HOOK_EVENTS].sort());
+    });
+
+    it('recognises a connection made by version 0.1.0 (older command format) and upgrades it', () => {
+        const v010 = JSON.stringify({
+            hooks: {Stop: [{hooks: [{type: 'command', command: `sh -c 'f="$1"; [ -f "$f" ] && exec gjs -m "$f"; exit 0' islet '${scripts.hook}'`, timeout: 5}]}]},
+            statusLine: {type: 'command', command: `sh -c 'f="$1"; p="$2"; [ -f "$f" ] && exec gjs -m "$f" "$p"; exit 0' islet '${scripts.statusLine}' ''`},
+        });
+        expect(connectionStatus(v010, scripts)).toEqual({hooks: true, statusLine: true, stale: true});
+        const upgraded = repairSettings(v010, scripts);
+        expect(connectionStatus(upgraded, scripts)).toEqual({hooks: true, statusLine: true, stale: false});
+        expect(parse(upgraded).hooks.Stop).toHaveLength(1);
+    });
+
+    it('recognises its entries wherever the extension is installed (not only under its UUID folder)', () => {
+        const dev = {hook: '/home/me/code/islet/dist/bridge/hook.js', statusLine: '/home/me/code/islet/dist/bridge/statusline.js'};
+        const connected = connectSettings('{"theme":"dark"}', dev);
+        expect(connectionStatus(connected, dev)).toEqual({hooks: true, statusLine: true, stale: false});
+        expect(JSON.parse(disconnectSettings(connected))).toEqual({theme: 'dark'});
+    });
+});
+
 describe('connectionStatus', () => {
     it('is false for invalid or empty settings', () => {
-        expect(connectionStatus('nope')).toEqual({hooks: false, statusLine: false});
-        expect(connectionStatus(null)).toEqual({hooks: false, statusLine: false});
+        expect(connectionStatus('nope')).toEqual({hooks: false, statusLine: false, stale: false});
+        expect(connectionStatus(null)).toEqual({hooks: false, statusLine: false, stale: false});
     });
 });
