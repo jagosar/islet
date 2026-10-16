@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Keeps a personal email out of the public history: a commit must be authored with a GitHub
+# noreply address (ID+user@users.noreply.github.com). Enable with `npm run hooks`.
+author="$(git var GIT_AUTHOR_IDENT)"
+committer="$(git var GIT_COMMITTER_IDENT)"
+for who in "$author" "$committer"; do
+    case "$who" in
+        *@users.noreply.github.com*) ;;
+        *)
+            echo "Refusing to commit: ${who%% [0-9]*} does not use a GitHub noreply email." >&2
+            echo "Fix it with: git config user.email \"ID+user@users.noreply.github.com\"" >&2
+            exit 1
+            ;;
+    esac
+done
