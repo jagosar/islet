@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.zip
 coverage/
+dev/hook-playground/*.txt
