@@ -134,12 +134,22 @@ work: no watchers, no timers, no processes.
 - Metrics as in the original: input, cache write, output, cache read; **fresh** = input + cache
   write + output; **processed** = fresh + cache read. Subagent (`isSidechain`) usage is included.
 - Unknown usage fields (e.g. `iterations`) are ignored and logged once, never guessed.
-- **Verified in spike S5:** de-duplicated by `message.id` across all transcript files (a resumed
-  session copies earlier responses), the totals match the `cost-state.modelUsage` Claude Code
-  writes when a session ends, exactly, in all four categories. `output_tokens` already includes
-  thinking tokens (`output_tokens_details.thinking_tokens`), so they are not added again.
-  Responses with model `<synthetic>` are local messages and are skipped. Days are local days
-  (`Intl` with the system time zone; works in GJS). `scripts/usage-report.mjs` repeats the
+- **Verified in spike S5** against the `cost-state.modelUsage` Claude Code writes when a
+  session ends:
+  - De-duplicated by `message.id` across all transcript files (a resumed session copies earlier
+    responses), the transcript totals match **exactly** for a session with only conversation
+    turns. A naive sum overcounts by up to 1.9×.
+  - They **undercount** sessions with auxiliary calls that are never written to the transcript:
+    the auto-mode permission classifier, the generated session title and the "away" summary.
+    Measured on one terminal session: fresh −1.3 %, cache reads −67 % (the classifier re-reads
+    the context), plus a model that never appears in the transcript.
+  - `output_tokens` already includes thinking tokens, so they are not added again. Responses
+    with model `<synthetic>` are local messages and are skipped. Days are local days (`Intl`,
+    works in GJS).
+- **Decision:** live totals come from transcripts. When a session's `cost-state` appears, its
+  totals replace the transcript totals for that session, with the difference booked on the
+  session's last day. The UI never calls a running session's figures exact, and leads with
+  fresh tokens, which the auxiliary calls barely affect. `scripts/usage-report.mjs` repeats the
   comparison on any machine.
 - No API-equivalent cost in v1: on a subscription it is misleading and the price table is a
   maintenance burden.
