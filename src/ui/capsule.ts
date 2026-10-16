@@ -1,19 +1,19 @@
+import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
-import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+
+import type {CompactView, Tone} from '../core/island.js';
 
 const MORPH_MS = 250;
-const LIVE_ACTIVITY_MS = 4000;
+const TONES: Tone[] = ['normal', 'attention', 'muted'];
 
 /**
- * The island in the top bar: a compact text, temporary live activities that grow the capsule,
- * and an "unavailable" look while the daemon is not running.
+ * The island in the top bar. It shows either the compact view or a live activity; which one,
+ * and for how long, is decided by the extension (core/island.ts). Its menu is the expanded view.
  */
 export class Capsule extends PanelMenu.Button {
     static {
@@ -23,12 +23,12 @@ export class Capsule extends PanelMenu.Button {
     private readonly pill: St.BoxLayout;
     private readonly label: St.Label;
     private mirror: Clutter.Actor | null = null;
-    private liveTimeoutId = 0;
-    private compact = 'Claude';
+    private compact: CompactView = {text: 'Claude', tone: 'muted'};
+    private live: CompactView | null = null;
 
-    /** `onSimulate` is a spike hook: the menu item sends a fake agent event through the daemon. */
-    constructor(onSimulate: () => void) {
+    constructor() {
         super(0.5, 'Islet', false);
+        this.accessible_name = 'Islet';
 
         this.pill = new St.BoxLayout({
             style_class: 'islet-pill',
@@ -41,17 +41,13 @@ export class Capsule extends PanelMenu.Button {
         this.label = new St.Label({
             style_class: 'islet-label',
             y_align: Clutter.ActorAlign.CENTER,
-            text: this.compact,
+            text: this.compact.text,
         });
         this.label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this.pill.add_child(this.label);
         this.add_child(this.pill);
-
-        if (this.menu instanceof PopupMenu.PopupMenu) {
-            const simulate = new PopupMenu.PopupMenuItem(_('Simulate agent event'));
-            simulate.connect('activate', onSimulate);
-            this.menu.addMenuItem(simulate);
-        }
+        this.label_actor = this.label;
+        this.applyTone(this.compact.tone);
 
         // Outside a morph, follow width changes from styling, fonts or scaling.
         this.container.connectObject('notify::allocation', () => {
@@ -63,37 +59,38 @@ export class Capsule extends PanelMenu.Button {
         }, this);
     }
 
-    /** The text shown while no live activity runs. */
-    get compactText(): string {
-        return this.compact;
-    }
-
-    /** The text on screen right now. */
     get shownText(): string {
         return this.label.text;
     }
 
+    get compactText(): string {
+        return this.compact.text;
+    }
+
     get isLive(): boolean {
-        return this.liveTimeoutId !== 0;
+        return this.live !== null;
     }
 
     get isAvailable(): boolean {
-        return !this.pill.has_style_pseudo_class('unavailable');
+        return !this.pill.has_style_pseudo_class('muted');
     }
 
-    setCompactText(text: string): void {
-        if (text === this.compact)
+    setCompact(view: CompactView): void {
+        if (view.text === this.compact.text && view.tone === this.compact.tone)
             return;
-        this.compact = text;
-        if (!this.isLive)
-            this.morphTo(text);
+        this.compact = view;
+        if (!this.live)
+            this.display(view);
     }
 
-    setAvailable(available: boolean): void {
-        if (available)
-            this.pill.remove_style_pseudo_class('unavailable');
+    /** Shows a live activity until it is replaced or cleared with null. */
+    setLive(view: CompactView | null): void {
+        this.live = view;
+        if (view)
+            this.pill.add_style_pseudo_class('live');
         else
-            this.pill.add_style_pseudo_class('unavailable');
+            this.pill.remove_style_pseudo_class('live');
+        this.display(view ?? this.compact);
     }
 
     /**
@@ -104,27 +101,24 @@ export class Capsule extends PanelMenu.Button {
         this.mirror = actor;
     }
 
-    showLiveActivity(text: string): void {
-        this.clearLiveTimeout();
-        this.pill.add_style_pseudo_class('live');
-        this.morphTo(text);
-
-        this.liveTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LIVE_ACTIVITY_MS, () => {
-            this.liveTimeoutId = 0;
-            this.pill.remove_style_pseudo_class('live');
-            this.morphTo(this.compact);
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
     override destroy(): void {
-        this.clearLiveTimeout();
         this.mirror = null;
         super.destroy();
     }
 
-    private targetWidth(): number {
-        return this.container.get_preferred_width(-1)[1];
+    private display(view: CompactView): void {
+        this.applyTone(view.tone);
+        if (view.text !== this.label.text)
+            this.morphTo(view.text);
+    }
+
+    private applyTone(tone: Tone): void {
+        for (const other of TONES) {
+            if (other === tone)
+                this.pill.add_style_pseudo_class(other);
+            else
+                this.pill.remove_style_pseudo_class(other);
+        }
     }
 
     private morphTo(text: string): void {
@@ -133,7 +127,7 @@ export class Capsule extends PanelMenu.Button {
 
         this.container.remove_transition('width');
         this.container.set_width(-1);
-        const to = this.targetWidth();
+        const to = this.container.get_preferred_width(-1)[1];
 
         // Both actors run the same transition, so they have the same width on every frame.
         for (const actor of [this.container, this.mirror]) {
@@ -146,13 +140,6 @@ export class Capsule extends PanelMenu.Button {
                 duration: MORPH_MS,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             });
-        }
-    }
-
-    private clearLiveTimeout(): void {
-        if (this.liveTimeoutId) {
-            GLib.source_remove(this.liveTimeoutId);
-            this.liveTimeoutId = 0;
         }
     }
 }
@@ -169,5 +156,6 @@ export class CapsuleSpacer extends PanelMenu.Button {
         this.can_focus = false;
         this.track_hover = false;
         this.container.opacity = 0;
+        this.accessible_role = Atk.Role.INVALID; // Invisible to screen readers.
     }
 }

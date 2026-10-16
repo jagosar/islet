@@ -1,3 +1,5 @@
+/* Capsule */
+
 .islet-pill {
   height: 22px;
   padding: 0 10px;
@@ -17,18 +19,108 @@
   background-color: #8fd18f;
 }
 
-.islet-pill:live .islet-dot {
+.islet-pill:attention .islet-dot {
   background-color: #f5a623;
 }
 
-.islet-pill:unavailable .islet-dot {
+.islet-pill:muted .islet-dot {
   background-color: rgba(255, 255, 255, 0.35);
 }
 
-.islet-pill:unavailable .islet-label {
+.islet-pill:muted .islet-label {
   color: rgba(255, 255, 255, 0.55);
 }
 
 .islet-label {
   font-feature-settings: "tnum";
+}
+
+/* Expanded view */
+
+.islet-panel {
+  width: 340px;
+  padding: 6px 12px 10px;
+  spacing: 4px;
+}
+
+.islet-section-title {
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.islet-today {
+  spacing: 6px;
+}
+
+.islet-big-number {
+  font-size: 22pt;
+  font-weight: 300;
+  font-feature-settings: "tnum";
+}
+
+.islet-unit {
+  margin-top: 14px;
+}
+
+.islet-caption {
+  font-size: 9pt;
+  font-feature-settings: "tnum";
+}
+
+.islet-note {
+  font-size: 9pt;
+  color: rgba(127, 127, 127, 1);
+}
+
+.islet-plan-bar {
+  spacing: 3px;
+  margin-top: 4px;
+}
+
+.islet-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background-color: rgba(127, 127, 127, 0.25);
+}
+
+.islet-bar-fill {
+  height: 6px;
+  border-radius: 3px;
+  background-color: #8fd18f;
+}
+
+.islet-bar-fill.islet-bar-high {
+  background-color: #f5a623;
+}
+
+.islet-sessions {
+  spacing: 4px;
+}
+
+.islet-session-row {
+  spacing: 8px;
+}
+
+.islet-session-project {
+  font-weight: bold;
+}
+
+.islet-state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: rgba(127, 127, 127, 0.8);
+}
+
+.islet-state-needs-permission,
+.islet-state-waiting {
+  background-color: #f5a623;
+}
+
+.islet-state-working {
+  background-color: #8fd18f;
+}
+
+.islet-heatmap {
+  margin-top: 4px;
 }

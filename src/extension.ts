@@ -2,34 +2,53 @@ import GLib from 'gi://GLib';
 
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import {describeAgentEvent, parseAgentEvent} from './core/agentEvents.js';
-import {compactClaudeText, secondsUntilPlanExpires} from './core/compact.js';
+import {parseAgentEvent} from './core/agentEvents.js';
+import {secondsUntilPlanExpires} from './core/compact.js';
+import {LiveQueue, compactView, liveActivityForAgentEvent, planThresholdCrossed} from './core/island.js';
 import {DaemonClient, type DaemonState} from './services/daemonClient.js';
 import {Capsule, CapsuleSpacer} from './ui/capsule.js';
+import {ClaudePanel} from './ui/claudePanel.js';
 
 const CAPSULE_ROLE = 'islet-capsule';
 const SPACER_ROLE = 'islet-spacer';
+/** While the expanded view is open, relative times ("5 min ago") refresh this often. */
+const PANEL_REFRESH_S = 30;
 
 function nowSeconds(): number {
     return Math.floor(GLib.get_real_time() / 1_000_000);
 }
 
+function nowMs(): number {
+    return Math.floor(GLib.get_monotonic_time() / 1000);
+}
+
 export default class IsletExtension extends Extension {
     private capsule: Capsule | null = null;
     private spacer: CapsuleSpacer | null = null;
+    private panel: ClaudePanel | null = null;
     private daemon: DaemonClient | null = null;
     private state: DaemonState | null = null;
-    private refreshId = 0;
+    private live = new LiveQueue();
+    private sources = new Map<string, number>();
     private debug: {stop(): void} | null = null;
 
     enable(): void {
+        this.live = new LiveQueue();
         this.daemon = new DaemonClient(`${this.path}/daemon/main.js`, {
             onState: state => this.onState(state),
             onAgentEvent: fields => this.onAgentEvent(fields),
         });
-        this.capsule = new Capsule(() => this.simulateAgentEvent());
-        this.capsule.setAvailable(false);
+
+        this.capsule = new Capsule();
+        this.panel = new ClaudePanel();
+        if (this.capsule.menu instanceof PopupMenu.PopupMenu) {
+            const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+            item.add_child(this.panel);
+            this.capsule.menu.addMenuItem(item);
+            this.capsule.menu.connectObject('open-state-changed', (_menu: unknown, open: boolean) => this.onMenuToggled(open), this);
+        }
 
         // Place the capsule right of the clock with a mirror spacer on its left, so the clock
         // stays centred. If another extension moved the clock out of the centre box, the
@@ -53,62 +72,93 @@ export default class IsletExtension extends Extension {
     disable(): void {
         this.debug?.stop();
         this.debug = null;
-        this.clearRefresh();
+        for (const id of this.sources.values())
+            GLib.source_remove(id);
+        this.sources.clear();
         this.daemon?.stop();
         this.daemon = null;
         this.state = null;
+        this.live.clear();
+        this.capsule?.menu.disconnectObject(this);
         this.capsule?.destroy();
         this.capsule = null;
+        this.panel = null; // Destroyed with the capsule's menu.
         this.spacer?.destroy();
         this.spacer = null;
     }
 
     private onState(state: DaemonState): void {
+        const crossed = this.state?.available ? planThresholdCrossed(this.state.plan, state.plan) : null;
         this.state = state;
-        this.render();
-    }
-
-    /** Renders the compact capsule from the daemon state, and refreshes once when it expires. */
-    private render(): void {
-        if (!this.capsule || !this.state)
-            return;
-        const now = nowSeconds();
-        this.capsule.setAvailable(this.state.available);
-        this.capsule.setCompactText(compactClaudeText(this.state.usage, this.state.plan, now));
-
-        this.clearRefresh();
-        const expiresIn = secondsUntilPlanExpires(this.state.plan, now);
-        if (expiresIn !== null) {
-            this.refreshId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, expiresIn, () => {
-                this.refreshId = 0;
-                this.render();
-                return GLib.SOURCE_REMOVE;
+        if (crossed !== null && state.plan?.fiveHour) {
+            const reset = GLib.DateTime.new_from_unix_local(state.plan.fiveHour.resetsAt)?.format('%H:%M') ?? '';
+            this.pushLive({
+                key: 'plan',
+                text: _('Claude plan at %s · resets %s').replace('%s', `${crossed}%`).replace('%s', reset),
+                tone: 'attention',
+                priority: 2,
             });
         }
-    }
-
-    private clearRefresh(): void {
-        if (this.refreshId) {
-            GLib.source_remove(this.refreshId);
-            this.refreshId = 0;
-        }
+        this.render();
+        if (this.capsule?.menu instanceof PopupMenu.PopupMenu && this.capsule.menu.isOpen)
+            this.panel?.update(state);
     }
 
     private onAgentEvent(fields: Record<string, string>): void {
         const event = parseAgentEvent(fields);
-        const text = event && describeAgentEvent(event, _);
-        if (text)
-            this.capsule?.showLiveActivity(text);
+        const activity = event && liveActivityForAgentEvent(event, _);
+        if (activity)
+            this.pushLive(activity);
     }
 
-    /** Spike: sends a fake permission prompt through the daemon and back. */
-    private simulateAgentEvent(): void {
-        this.daemon?.reportAgentEvent({
-            session_id: 'simulated',
-            cwd: GLib.build_filenamev([GLib.get_home_dir(), 'code', 'islet']),
-            hook_event_name: 'Notification',
-            notification_type: 'permission_prompt',
+    /** Renders the compact capsule, and refreshes once when the plan percentage expires. */
+    private render(): void {
+        if (!this.capsule || !this.state)
+            return;
+        const now = nowSeconds();
+        this.capsule.setCompact(compactView({...this.state, now}, _));
+
+        const expiresIn = secondsUntilPlanExpires(this.state.plan, now);
+        this.schedule('plan-expiry', expiresIn === null ? null : expiresIn * 1000, () => this.render());
+    }
+
+    private pushLive(activity: Parameters<LiveQueue['push']>[0]): void {
+        if (this.live.push(activity, nowMs()))
+            this.showLive();
+    }
+
+    private showLive(): void {
+        this.capsule?.setLive(this.live.shown);
+        const next = this.live.nextChangeAt();
+        this.schedule('live', next === null ? null : Math.max(0, next - nowMs()), () => {
+            if (this.live.tick(nowMs()))
+                this.showLive();
         });
+    }
+
+    private onMenuToggled(open: boolean): void {
+        if (open && this.state)
+            this.panel?.update(this.state);
+        const refresh = () => {
+            this.panel?.refresh();
+            this.schedule('panel', PANEL_REFRESH_S * 1000, refresh);
+        };
+        this.schedule('panel', open ? PANEL_REFRESH_S * 1000 : null, refresh);
+    }
+
+    /** One timer per name: replaces the previous one; null just cancels. */
+    private schedule(name: string, delayMs: number | null, callback: () => void): void {
+        const existing = this.sources.get(name);
+        if (existing)
+            GLib.source_remove(existing);
+        this.sources.delete(name);
+        if (delayMs === null)
+            return;
+        this.sources.set(name, GLib.timeout_add(GLib.PRIORITY_DEFAULT, delayMs, () => {
+            this.sources.delete(name);
+            callback();
+            return GLib.SOURCE_REMOVE;
+        }));
     }
 
     /**
