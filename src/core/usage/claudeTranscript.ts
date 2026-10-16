@@ -63,6 +63,52 @@ export function parseUsageLine(line: string): UsageRecord | null {
     return {messageId: id, sessionId, model, timestamp, tokens: {input, cacheWrite, cacheRead, output}};
 }
 
+/** Claude Code's own totals for a session, written to its transcript when it ends. */
+export interface CostState {
+    sessionId: string;
+    models: Map<string, TokenCounts>;
+}
+
+/** Reads a `cost-state` line; null for any other line or an invalid one. */
+export function parseCostStateLine(line: string): CostState | null {
+    if (!line.includes('"cost-state"'))
+        return null;
+    let entry: unknown;
+    try {
+        entry = JSON.parse(line);
+    } catch {
+        return null;
+    }
+    if (typeof entry !== 'object' || entry === null)
+        return null;
+    const {type, sessionId, modelUsage} = entry as Record<string, unknown>;
+    if (type !== 'cost-state' || typeof sessionId !== 'string' || typeof modelUsage !== 'object' || modelUsage === null)
+        return null;
+
+    const models = new Map<string, TokenCounts>();
+    for (const [model, usage] of Object.entries(modelUsage as Record<string, unknown>)) {
+        if (typeof usage !== 'object' || usage === null)
+            return null;
+        const u = usage as Record<string, unknown>;
+        const input = count(u.inputTokens);
+        const cacheWrite = count(u.cacheCreationInputTokens);
+        const cacheRead = count(u.cacheReadInputTokens);
+        const output = count(u.outputTokens);
+        if (input === null || cacheWrite === null || cacheRead === null || output === null)
+            return null;
+        models.set(model, {input, cacheWrite, cacheRead, output});
+    }
+    return {sessionId, models};
+}
+
+/**
+ * Cheap pre-check before JSON.parse: transcripts are mostly conversation content, and only
+ * assistant responses with usage and cost-state entries matter.
+ */
+export function mayHoldUsage(line: string): boolean {
+    return (line.includes('"usage"') && line.includes('"assistant"')) || line.includes('"cost-state"');
+}
+
 /** Input + cache write + output: the new work of a response. */
 export function freshTokens(tokens: TokenCounts): number {
     return tokens.input + tokens.cacheWrite + tokens.output;

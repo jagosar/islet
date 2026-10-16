@@ -24,7 +24,7 @@ const line = JSON.stringify({
     type: 'assistant', sessionId: 's', timestamp: '2026-10-16T10:00:00Z',
     message: {id: 'm', model: 'claude-haiku-5-5', usage: {input_tokens: 1, output_tokens: 2}},
 });
-const aggregator = new UsageAggregator();
+const aggregator = new UsageAggregator('Europe/Berlin');
 aggregator.add(parseUsageLine(line));
 aggregator.add(parseUsageLine(line));
 check('a repeated response is counted once', aggregator.size, 1);
