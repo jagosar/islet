@@ -31,6 +31,20 @@ export interface PlanUsage {
     source?: PlanSource;
 }
 
+/**
+ * A guess of where the 5-hour window is now, between two measurements: the last measured figure
+ * plus what the transcripts say was used since. It always belongs to one reading (`basedOn` is
+ * that reading's `measuredAt`) and is never saved.
+ */
+export interface PlanEstimate {
+    /** 0 to 100, above the measured figure. */
+    fiveHour: number;
+    /** `measuredAt` of the reading it extends. */
+    basedOn: number;
+    /** Unix epoch seconds it was computed at. */
+    at: number;
+}
+
 export interface DayUsage {
     /** YYYY-MM-DD, local day. */
     day: string;
@@ -271,4 +285,16 @@ export function decodeInsights(text: string): Insights | null {
     if (!day || !week || session === null)
         return null;
     return {generatedAt: insights.generatedAt, day, week, session: session ?? null};
+}
+
+export function encodePlanEstimate(estimate: PlanEstimate | null): string {
+    return encode({estimate});
+}
+
+export function decodePlanEstimate(text: string): PlanEstimate | null {
+    const estimate = parseDocument(text)?.estimate;
+    if (!isObject(estimate) || !isCount(estimate.fiveHour) || estimate.fiveHour > 100 ||
+        !isCount(estimate.basedOn) || !isCount(estimate.at))
+        return null;
+    return {fiveHour: estimate.fiveHour, basedOn: estimate.basedOn, at: estimate.at};
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import {describe, expect, it} from 'vitest';
-import {mergePlan, parseDesktopPlanHistory, planFromLimitHit} from '../../src/core/planSources.js';
+import {mergePlan, parseDesktopPlanHistory, parseDesktopPlanSamples, planFromLimitHit} from '../../src/core/planSources.js';
 import type {PlanUsage} from '../../src/core/protocol.js';
 
 const NOW = 1_792_400_000;
@@ -100,5 +100,34 @@ describe('mergePlan', () => {
     it('forgets a window that is missing from the reading and known to have reset', () => {
         const limit: PlanUsage = {measuredAt: NOW + 90_000, source: 'limit', fiveHour: {usedPercentage: 100, resetsAt: NOW + 99_000}};
         expect(mergePlan(statusline, limit, NOW + 90_000).sevenDay).toBeUndefined();
+    });
+});
+
+describe('parseDesktopPlanSamples', () => {
+    const history = (samples: unknown[]) => JSON.stringify({version: 2, samples});
+
+    it('lists every readable sample, oldest first, in seconds', () => {
+        expect(parseDesktopPlanSamples(history([
+            {t: 3000, u: {fh: 30, sd: 3}}, {t: 1000, u: {fh: 10}}, {t: 2000, u: {sd: 2}},
+        ]))).toEqual([
+            {at: 1, fiveHour: 10}, {at: 2, sevenDay: 2}, {at: 3, fiveHour: 30, sevenDay: 3},
+        ]);
+    });
+
+    it('skips what is not a sample, and figures that are not percentages', () => {
+        expect(parseDesktopPlanSamples(history([null, 'x', {t: -1, u: {fh: 1}}, {t: 5000, u: {fh: 120}}, {t: 6000, u: {fh: 7, sd: -3}}])))
+            .toEqual([{at: 6, fiveHour: 7}]);
+    });
+
+    it('keeps the latest thousand', () => {
+        const many = Array.from({length: 1200}, (_, i) => ({t: (i + 1) * 1000, u: {fh: 1}}));
+        const samples = parseDesktopPlanSamples(history(many))!;
+        expect(samples).toHaveLength(1000);
+        expect(samples[0].at).toBe(201);
+        expect(samples.at(-1)!.at).toBe(1200);
+    });
+
+    it.each(['{', '[]', JSON.stringify({samples: {}}), JSON.stringify({version: 2})])('returns null for %s', text => {
+        expect(parseDesktopPlanSamples(text)).toBeNull();
     });
 });

@@ -149,7 +149,7 @@ export class Sandbox {
     }
 
     /** A daemon property, parsed from its JSON document. */
-    property(name: 'Usage' | 'PlanUsage' | 'Sessions' | 'Insights'): Record<string, unknown> {
+    property(name: 'Usage' | 'PlanUsage' | 'PlanEstimate' | 'Sessions' | 'Insights'): Record<string, unknown> {
         const result = this.run('get', name);
         if (result.status !== 0)
             throw new Error(`reading ${name} failed: ${result.stderr}`);

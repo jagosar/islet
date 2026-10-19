@@ -15,6 +15,7 @@ import GLib from 'gi://GLib';
 
 import {BUS_NAME} from '../core/dbus.js';
 import {DesktopPlanModule} from './desktopPlanModule.js';
+import {PlanEstimateModule} from './planEstimateModule.js';
 import {IsletService} from './service.js';
 import {SessionsModule} from './sessionsModule.js';
 import {SpoolModule} from './spoolModule.js';
@@ -28,10 +29,15 @@ const service = new IsletService(store);
 // otherwise be garbage-collected together with them, and stop seeing changes.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- referenced to stay alive, see above
 const sessions = new SessionsModule(service, store);
-const usage = new UsageModule(service);
+// The estimator reads the usage and the desktop history, and both tell it when they change:
+// they reach it through this indirection, as it is created last.
+let estimator: PlanEstimateModule | null = null;
+const usage = new UsageModule(service, undefined, () => estimator?.refresh());
 usage.start();
-const desktopPlan = new DesktopPlanModule(service);
+const desktopPlan = new DesktopPlanModule(service, undefined, () => estimator?.refresh());
 desktopPlan.start();
+estimator = new PlanEstimateModule(service, () => desktopPlan.samples, (from, to) => usage.weightBetween(from, to));
+estimator.start();
 // After the sessions were restored: replayed events apply on top of them.
 const spool = new SpoolModule(service);
 spool.start();

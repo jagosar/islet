@@ -31,7 +31,7 @@ const SPACER_ROLE = 'islet-spacer';
 const PANEL_REFRESH_S = 30;
 /** Players already playing when Islet starts are not announced as a new song. */
 const MEDIA_SETTLE_MS = 3000;
-const NO_DAEMON: DaemonState = {available: false, usage: null, plan: null, sessions: [], insights: null};
+const NO_DAEMON: DaemonState = {available: false, usage: null, plan: null, estimate: null, sessions: [], insights: null};
 
 function nowSeconds(): number {
     return Math.floor(GLib.get_real_time() / 1_000_000);
@@ -185,8 +185,8 @@ export default class IsletExtension extends Extension {
             throw new Error('ISLET_DEV_FAIL_ENABLE: simulated failure at the end of enable()');
         import('./dev/debugService.js')
             .then(({DebugService}) => {
-                if (this.capsule && this.expanded)
-                    this.debug = new DebugService(this.capsule, this.expanded);
+                if (this.capsule && this.expanded && this.panel)
+                    this.debug = new DebugService(this.capsule, this.expanded, this.panel);
             })
             .catch((error: unknown) => console.warn(`Islet: debug service unavailable: ${String(error)}`));
     }

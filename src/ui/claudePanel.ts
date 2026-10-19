@@ -124,6 +124,11 @@ export class ClaudePanel extends St.BoxLayout {
         return button;
     }
 
+    /** Geometry of the plan bars (5-hour, weekly), for the end-to-end test. */
+    get planBars(): {width: number; measured: number; estimated: number}[] {
+        return [this.fiveHour.geometry, this.weekly.geometry];
+    }
+
     update(state: DaemonState): void {
         this.state = state;
         this.refresh();
@@ -135,9 +140,14 @@ export class ClaudePanel extends St.BoxLayout {
             return;
         const now = Math.floor(GLib.get_real_time() / 1_000_000);
 
-        this.fiveHour.setWindow(state.plan?.fiveHour);
+        // An estimate extends one measurement: it is dropped as soon as a newer one arrives.
+        const estimate = state.available && state.plan && state.estimate?.basedOn === state.plan.measuredAt
+            ? state.estimate.fiveHour
+            : null;
+        this.fiveHour.setWindow(state.plan?.fiveHour, estimate);
         this.weekly.setWindow(state.plan?.sevenDay);
-        this.planNote.text = state.available ? planNote(state.plan, now) : _('Islet is starting or not running.');
+        const shownEstimate = estimate !== null && state.plan?.fiveHour !== undefined && Math.round(estimate) > Math.round(state.plan.fiveHour.usedPercentage);
+        this.planNote.text = state.available ? planNote(state.plan, now, shownEstimate) : _('Islet is starting or not running.');
 
         this.renderAgents(state, now);
 

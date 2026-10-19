@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import {formatTokens} from './format.js';
-import type {PlanUsage, UsageSnapshot} from './protocol.js';
+import type {PlanEstimate, PlanUsage, UsageSnapshot} from './protocol.js';
 import {freshTokens} from './usage/claudeTranscript.js';
 
 /**
@@ -27,6 +27,24 @@ export function currentPlanPercent(plan: PlanUsage | null, now: number): number 
 }
 
 /**
+ * The 5-hour percentage to show: the measured one, or the estimate extending it while there is
+ * one for this very reading (an estimate of an older reading is dropped at once, so a new
+ * measurement always wins).
+ */
+export function displayedPlanPercent(
+    plan: PlanUsage | null,
+    estimate: PlanEstimate | null,
+    now: number,
+): {percent: number; estimated: boolean} | null {
+    const measured = currentPlanPercent(plan, now);
+    if (measured === null)
+        return null;
+    if (plan && estimate && estimate.basedOn === plan.measuredAt && Math.round(estimate.fiveHour) > measured)
+        return {percent: Math.round(estimate.fiveHour), estimated: true};
+    return {percent: measured, estimated: false};
+}
+
+/**
  * Seconds until the plan percentage stops being shown (it goes stale or its window resets), or
  * null if nothing is shown. Lets the Shell refresh the capsule once, instead of ticking.
  */
@@ -36,11 +54,11 @@ export function secondsUntilPlanExpires(plan: PlanUsage | null, now: number): nu
     return Math.max(1, Math.min(plan.measuredAt + PLAN_FRESH_SECONDS, plan.fiveHour.resetsAt ?? Number.POSITIVE_INFINITY) - now);
 }
 
-/** "Claude 1.12M · 33%", "Claude 1.12M", "Claude 33%" or "Claude". */
-export function compactClaudeText(usage: UsageSnapshot | null, plan: PlanUsage | null, now: number): string {
+/** "Claude 1.12M · 33%", "Claude 1.12M · ≈35%" (estimated), "Claude 1.12M", "Claude 33%" or "Claude". */
+export function compactClaudeText(usage: UsageSnapshot | null, plan: PlanUsage | null, now: number, estimate: PlanEstimate | null = null): string {
     const fresh = todayFreshTokens(usage);
-    const percent = currentPlanPercent(plan, now);
-    const parts = [fresh > 0 ? formatTokens(fresh) : null, percent !== null ? `${percent}%` : null]
-        .filter(part => part !== null);
+    const shown = displayedPlanPercent(plan, estimate, now);
+    const percent = shown === null ? null : `${shown.estimated ? '≈' : ''}${shown.percent}%`;
+    const parts = [fresh > 0 ? formatTokens(fresh) : null, percent].filter(part => part !== null);
     return parts.length ? `Claude ${parts.join(' · ')}` : 'Claude';
 }

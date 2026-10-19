@@ -10,6 +10,7 @@
  *
  * None of them needs a network request or a credential.
  */
+import type {PlanSample} from './planEstimate.js';
 import type {PlanSource, PlanUsage, PlanWindow} from './protocol.js';
 import type {LimitHit} from './usage/claudeTranscript.js';
 
@@ -62,6 +63,43 @@ export function parseDesktopPlanHistory(text: string): PlanUsage | null {
         ...(latest.fh !== undefined ? {fiveHour: {usedPercentage: latest.fh}} : {}),
         ...(latest.sd !== undefined ? {sevenDay: {usedPercentage: latest.sd}} : {}),
     };
+}
+
+/** Samples kept for learning the pace: about a week of readings every 15 minutes, plus margin. */
+const MAX_SAMPLES = 1000;
+
+/**
+ * Every sample of the desktop app's history, oldest first, for learning how fast the 5-hour
+ * window rises (see planEstimate.ts). Samples that are not readable are skipped; null for a
+ * document that is not a history at all.
+ */
+export function parseDesktopPlanSamples(text: string): PlanSample[] | null {
+    let document: unknown;
+    try {
+        document = JSON.parse(text);
+    } catch {
+        return null;
+    }
+    if (typeof document !== 'object' || document === null)
+        return null;
+    const samples = (document as Record<string, unknown>).samples;
+    if (!Array.isArray(samples))
+        return null;
+
+    const result: PlanSample[] = [];
+    for (const sample of samples) {
+        if (typeof sample !== 'object' || sample === null)
+            continue;
+        const {t, u} = sample as Record<string, unknown>;
+        if (typeof t !== 'number' || !Number.isFinite(t) || t <= 0 || typeof u !== 'object' || u === null)
+            continue;
+        const {fh, sd} = u as Record<string, unknown>;
+        if (!isPercent(fh) && !isPercent(sd))
+            continue;
+        result.push({at: Math.floor(t / 1000), ...(isPercent(fh) ? {fiveHour: fh} : {}), ...(isPercent(sd) ? {sevenDay: sd} : {})});
+    }
+    result.sort((x, y) => x.at - y.at);
+    return result.slice(-MAX_SAMPLES);
 }
 
 /** The plan reading a limit message implies: its window at 100% until the reset. Null if it says nothing usable now. */

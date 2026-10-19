@@ -78,6 +78,20 @@ describe('liveActivityForAgentEvent', () => {
     });
 });
 
+describe('compact view with an estimate', () => {
+    const plan: PlanUsage = {measuredAt: now - 60, source: 'desktop', fiveHour: {usedPercentage: 27}};
+    const input = (estimate: IslandInput['estimate']): IslandInput =>
+        ({available: true, usage: null, plan, estimate, sessions: [], now});
+
+    it('shows the estimate with a tilde', () => {
+        expect(compactView(input({fiveHour: 33, basedOn: plan.measuredAt, at: now})).text).toBe('Claude ≈33%');
+    });
+
+    it('does not show an estimate of another reading', () => {
+        expect(compactView(input({fiveHour: 33, basedOn: plan.measuredAt - 900, at: now})).text).toBe('Claude 27%');
+    });
+});
+
 describe('planThresholdCrossed', () => {
     const plan = (used: number, resetsAt = now + 1000): PlanUsage => ({measuredAt: now, fiveHour: {usedPercentage: used, resetsAt}});
 

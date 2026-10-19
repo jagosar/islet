@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {
-    decodeInsights, decodePlanUsage, decodeSessions, decodeUsage, encodeInsights, encodePlanUsage, encodeSessions, encodeUsage,
+    decodeInsights, decodePlanEstimate, decodePlanUsage, decodeSessions, decodeUsage, encodeInsights, encodePlanEstimate,
+    encodePlanUsage, encodeSessions, encodeUsage,
     parsePlanUsageReport, type AgentSession, type PlanUsage, type UsageSnapshot,
 } from '../../src/core/protocol.js';
 import type {Insights} from '../../src/core/usage/insights.js';
@@ -153,5 +154,27 @@ describe('insights document', () => {
 
     it('rejects another protocol version', () => {
         expect(decodeInsights(JSON.stringify({version: 2, insights}))).toBeNull();
+    });
+});
+
+describe('plan estimate document', () => {
+    const estimate = {fiveHour: 33.4, basedOn: 1_792_394_040, at: 1_792_394_300};
+
+    it('round-trips, and null means no estimate', () => {
+        expect(decodePlanEstimate(encodePlanEstimate(estimate))).toEqual(estimate);
+        expect(decodePlanEstimate(encodePlanEstimate(null))).toBeNull();
+    });
+
+    it.each([
+        ['a figure over 100', {...estimate, fiveHour: 101}],
+        ['a negative figure', {...estimate, fiveHour: -1}],
+        ['a missing reading', {fiveHour: 33, at: 5}],
+        ['a time that is not a count', {...estimate, at: 'now'}],
+    ])('rejects %s', (_name, document) => {
+        expect(decodePlanEstimate(JSON.stringify({version: 1, estimate: document}))).toBeNull();
+    });
+
+    it('rejects another protocol version', () => {
+        expect(decodePlanEstimate(JSON.stringify({version: 2, estimate}))).toBeNull();
     });
 });

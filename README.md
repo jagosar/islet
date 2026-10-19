@@ -4,7 +4,7 @@ A small dynamic island for the GNOME top bar: Claude Code usage and live agent a
 playing and a focus timer, right next to the clock. Local-first: no accounts, no telemetry.
 
 <p align="center">
-  <img src="docs/assets/claude-panel.png" alt="The capsule next to the clock showing an agent waiting for permission, and the Claude tab: plan limits, sessions, this session's cost and tokens per model, and what is using the limits" width="380">
+  <img src="docs/assets/claude-panel.png" alt="The capsule next to the clock showing an agent waiting for permission, and the Claude tab: plan limits (the 5-hour figure estimated between measurements, shown with a tilde), sessions, this session and what is using the limits" width="380">
 </p>
 
 ## What it shows
@@ -82,6 +82,11 @@ things to `~/.claude/settings.json`:
 Plan usage also comes, without any setup, from the Claude desktop app (which records it every
 15 minutes or so while it runs) and from Claude Code's "You've hit your limit" messages. Islet
 reads these local files only: it never uses your login or the network.
+
+Between two measurements the 5-hour figure is **estimated** once a minute from what you used
+since (learned from your own history, shown with a "≈", and replaced by the next measurement). On
+a real history the estimate was off by 2.6 points on average over a 15-minute interval; run
+`node scripts/plan-estimate-report.mjs` after `npm run build` to see how it does on yours.
 
 Islet keeps everything else in the file, saves a backup, shows the exact change before making it,
 and Disconnect (or `./uninstall.sh`) removes exactly what it added. If Islet is ever removed

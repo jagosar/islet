@@ -116,6 +116,7 @@ GSettings (`org.gnome.shell.extensions.islet`), edited in a libadwaita preferenc
 |---|---|---|
 | `Usage` | property `s` | `UsageSnapshot`: today's tokens per model, fresh tokens per day |
 | `PlanUsage` | property `s` | `PlanUsage`: 5 h / 7 d windows and `measuredAt`, or `null` |
+| `PlanEstimate` | property `s` | `PlanEstimate`: where the 5 h window probably is between two readings, or `null` |
 | `Sessions` | property `s` | `AgentSession[]`: current Claude Code sessions |
 | `Insights` | property `s` | `Insights`: what is using the plan limits (24 h and 7 days) and the current session, or `null` |
 | `ReportAgentEvent(a{ss})` | method | from the hook bridge |
@@ -226,6 +227,26 @@ computer, always keeping the most recent reading (`src/core/planSources.ts`):
 | The desktop app's `~/.config/Claude/plan-usage-history.json` | both | ✗ | every ~15 min while the app runs |
 | "You've hit your session limit · resets 4:20pm (Europe/Berlin)" in transcripts | the one it names, at 100 % | ✓ | when a limit is hit, in every entry point |
 
+- **Between measurements (unreleased):** the desktop app's file changes only every ~15 minutes,
+  and nothing fresher reaches this computer. Islet does not ask Anthropic (no login token, no
+  network), so it **estimates** the 5-hour window between two readings: the last measured figure
+  plus what the transcripts say was used since, at the pace learned from the user's own history
+  (`src/core/planEstimate.ts`). The pace is points per dollar of consumption at list prices over
+  the latest intervals between consecutive samples (at least 4, at most 40; skipping resets,
+  saturation and gaps over 25 minutes), so it adapts to the plan and the models used. It lives in
+  its own `PlanEstimate` property, is never saved and never replaces a measurement: it belongs to
+  one reading (`basedOn`), disappears when a newer one arrives, stops 40 minutes after the last
+  one (the app is probably not running), rises at most 30 points above it, and is not computed
+  for the weekly window (it moves by whole points over days). The capsule and the bar show it
+  as "≈" (the bar draws the estimated part lighter); alerts and thresholds use measurements only.
+  `PlanEstimateModule` recomputes it once a minute and whenever usage or the history change;
+  the work is two binary searches over running totals, and nothing is published unless the
+  whole percentage changes.
+- **Accuracy**, walking forward on a real history with `scripts/plan-estimate-report.mjs`
+  (learning only from the past): over 27 intervals of 15 minutes the estimate of the next sample
+  was off by 2.6 points on average (median 1.4, 90 % under 4.9), and the actual rise was 0.96 times
+  the estimated one. Other usage the transcripts do not show (claude.ai chat, other computers)
+  also counts toward the real limit, so the estimate can only lag behind it.
 - A reading without a reset time keeps the previous one while it is the same window (not reset
   yet, percentage not lower). The capsule shows a figure for 30 minutes after it was measured,
   longer than the desktop app's sampling interval.

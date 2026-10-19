@@ -3,7 +3,7 @@
 #
 # End-to-end test in a nested GNOME Shell (needs mutter-dev-bin; run it on a GNOME desktop):
 #   npm run e2e                    capsule, live activities, daemon crash and restart
-#   E2E_KEYBOARD=1 npm run e2e     also the shortcut and tab navigation (keep the window visible)
+#   E2E_KEYBOARD=1 npm run e2e     also the shortcut, tab navigation and painted bars (keep the window visible)
 #
 # It starts the extension in an isolated nested Shell with synthetic Claude transcripts, then
 # drives and inspects it through the development debug service (src/dev, never packaged): the
@@ -86,6 +86,18 @@ mkdir -p "$desktop"
 printf '{"version":2,"samples":[{"t":%s,"org":"e2e","u":{"fh":61,"sd":22}}]}' "$(date +%s%3N)" > "$desktop/history.tmp"
 mv "$desktop/history.tmp" "$desktop/plan-usage-history.json"
 wait_for 10 shown_is 'Claude 1.00K · 61%' ; check "the desktop app's plan figure in the capsule" "$(shown)" "Claude 1.00K · 61%"
+# The bars once stayed empty after the panel was closed and opened again (the fill was sized from
+# a width that had not settled yet). They are painted from their width now. A nested window gets
+# its layout and paint only while the host draws it, so these checks are in the part that needs
+# the window visible (E2E_KEYBOARD=1).
+bars_are() { # bars_are FIVE_HOUR WEEKLY: both bars >= 100 px wide, each filled with its share (+/- 1 px)
+    field "['planBars']" | python3 -I -c "
+import ast, sys
+bars = ast.literal_eval(sys.stdin.read()); want = [int(sys.argv[1]), int(sys.argv[2])]
+ok = len(bars) == 2 and all(b['width'] >= 100 and abs(b['measured'] - round(b['width'] * w / 100)) <= 1 for b, w in zip(bars, want))
+print('ok' if ok else bars)" "$1" "$2"
+}
+bars_ok() { [ "$(bars_are "$1" "$2")" = ok ]; }
 reset_at=$(( $(date +%s) + 7200 ))
 reset_clock="$(TZ=UTC date -d "@$reset_at" +%-l:%M%P)"
 printf '{"type":"assistant","sessionId":"e2e","timestamp":"%s","isApiErrorMessage":true,"error":"rate_limit","apiError":"usage_limit_reached","message":{"id":"limit","model":"<synthetic>","content":[{"type":"text","text":"You'"'"'ve hit your session limit · resets %s (UTC)"}]}}\n' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$reset_clock" >> "$work/claude/projects/-demo/e2e.jsonl"
@@ -101,8 +113,12 @@ if [ -n "${E2E_KEYBOARD:-}" ]; then
     debug keys Right; sleep 0.4; check "Right switches to Music" "$(field "['page']")" "media"
     debug keys Right; sleep 0.4; check "Right switches to Focus" "$(field "['page']")" "focus"
     debug keys Escape; sleep 0.6; check "Escape closes" "$(field "['menuOpen']")" "False"
+    # The regression: after being closed and opened again, the bars were left at a stale width.
+    debug keys Control_L+Alt_L+space; wait_for 8 bars_ok 100 22
+    check "the plan bars are filled when the panel is reopened" "$(bars_are 100 22)" "ok"
+    debug keys Escape; sleep 0.6
 else
-    echo "keyboard: skipped (set E2E_KEYBOARD=1 and keep the nested window visible)"
+    echo "keyboard and painted bars: skipped (set E2E_KEYBOARD=1 and keep the nested window visible)"
 fi
 
 echo "daemon crash and restart"
@@ -110,6 +126,45 @@ pkill -9 -f "$nested_daemon"
 wait_for 8 unavailable; check "the capsule greys out" "$(field "['available']")" "False"
 wait_for 20 available; check "the daemon comes back by itself" "$(field "['available']")" "True"
 wait_for 10 shown_starts 'Claude 1.00K'; check_match "usage is back after the restart" "$(shown)" '^Claude 1\.00K'
+
+echo "the estimate between two measurements"
+# Measurements every 15 minutes rising 8 points per $4 used (2 points per dollar), then $2 more
+# after the last one (40 %): the capsule leads with the estimate, "≈44%".
+iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%S.000Z; }
+request() { # request MINUTES_AGO ID: a $1 response (Sonnet, 66,667 output tokens)
+    printf '{"type":"assistant","sessionId":"est","timestamp":"%s","message":{"id":"est%s","model":"claude-sonnet-5-5","usage":{"output_tokens":66667}}}\n' "$(iso $((est_now - $1 * 60)))" "$2"
+}
+est_now=$(date +%s)
+{
+    id=0
+    for m in 72 69 66 63  57 54 51 48  42 39 36 33  27 24 21 18  13 10 7 4; do id=$((id + 1)); request $m $id; done
+    request 0 91   # after the last measurement
+} >> "$work/claude/projects/-demo/est.jsonl"
+# The measurements, the last of them a second ago (it must be newer than the limit message
+# above, or it would be ignored as an older reading); and one more dollar right after it.
+samples=""
+for entry in "75 0" "60 8" "45 16" "30 24" "15 32"; do
+    set -- $entry; samples="$samples{\"t\":$(( (est_now - $1 * 60) * 1000 )),\"org\":\"e2e\",\"u\":{\"fh\":$2,\"sd\":22}},"
+done
+samples="$samples{\"t\":$(( (est_now - 1) * 1000 )),\"org\":\"e2e\",\"u\":{\"fh\":40,\"sd\":22}}"
+printf '{"version":2,"samples":[%s]}' "$samples" > "$desktop/history.tmp"
+mv "$desktop/history.tmp" "$desktop/plan-usage-history.json"
+request 0 92 >> "$work/claude/projects/-demo/est.jsonl"
+estimate_shown() { [[ "$(shown)" =~ ^Claude\ [0-9.]+[KM]\ ·\ ≈4[3-5]%$ ]]; }
+wait_for 15 estimate_shown ; check_match "the capsule shows the estimate with a tilde" "$(shown)" '^Claude [0-9.]+[KM] · ≈4[3-5]%$'
+estimated_bar() { # the 5-hour bar: 40 % measured, the estimate (43 to 45 %) lighter after it
+    field "['planBars']" | python3 -I -c "
+import ast, sys
+bar = ast.literal_eval(sys.stdin.read())[0]; w = bar['width']
+ok = w >= 100 and abs(bar['measured'] - round(w * 0.40)) <= 1 and round(w * 0.03) - 1 <= bar['estimated'] <= round(w * 0.05) + 1
+print('ok' if ok else bar)"
+}
+if [ -n "${E2E_KEYBOARD:-}" ]; then
+    estimated_bar_ok() { [ "$(estimated_bar)" = ok ]; }
+    debug keys Control_L+Alt_L+space; wait_for 8 estimated_bar_ok
+    check "the bar shows the measured part and the estimate after it" "$(estimated_bar)" "ok"
+    debug keys Escape; sleep 0.6
+fi
 
 echo "log"
 errors="$(grep -cE 'JS ERROR' "$log" || true)"

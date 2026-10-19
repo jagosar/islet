@@ -7,7 +7,7 @@
 import {describeAgentEvent, type AgentEvent} from './agentEvents.js';
 import {compactClaudeText} from './compact.js';
 import {formatCountdown} from './focus.js';
-import type {AgentSession, PlanUsage, UsageSnapshot} from './protocol.js';
+import type {AgentSession, PlanEstimate, PlanUsage, UsageSnapshot} from './protocol.js';
 
 export type Tone = 'normal' | 'attention' | 'muted';
 
@@ -20,6 +20,8 @@ export interface IslandInput {
     available: boolean;
     usage: UsageSnapshot | null;
     plan: PlanUsage | null;
+    /** The estimate extending `plan`'s 5-hour figure, if any (it must belong to that reading to be shown). */
+    estimate?: PlanEstimate | null;
     sessions: AgentSession[];
     /** Unix epoch seconds. */
     now: number;
@@ -62,7 +64,7 @@ export function compactView(input: IslandInput, t: Translate = identity): Compac
             : {text: t('Focus %s').replace('%s', countdown), tone: 'normal'};
     }
 
-    const claude = input.available ? compactClaudeText(input.usage, input.plan, input.now) : CLAUDE_IDLE;
+    const claude = input.available ? compactClaudeText(input.usage, input.plan, input.now, input.estimate ?? null) : CLAUDE_IDLE;
     if (claude !== CLAUDE_IDLE)
         return {text: claude, tone: 'normal'};
     if (input.nowPlaying)

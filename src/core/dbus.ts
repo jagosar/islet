@@ -21,6 +21,8 @@ export const INTERFACE_XML = `
     <property name="Usage" type="s" access="read"/>
     <!-- Claude plan windows, when and where they were measured (PlanUsage), or null. -->
     <property name="PlanUsage" type="s" access="read"/>
+    <!-- Where the 5-hour window probably is between two measurements (PlanEstimate), or null. -->
+    <property name="PlanEstimate" type="s" access="read"/>
     <!-- Current Claude Code sessions (AgentSession[]). -->
     <property name="Sessions" type="s" access="read"/>
     <!-- What is using the plan limits, and the current session (Insights), or null. -->
