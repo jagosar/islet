@@ -228,3 +228,51 @@ describe('memory bounds', () => {
         expect(c.size).toBe(0);
     });
 });
+
+describe('weightBetween', () => {
+    it('adds up what was consumed after the start and up to the end', () => {
+        const c = collector([
+            record(NOW - 500, {tokens: ONE_DOLLAR}),
+            record(NOW - 400, {tokens: ONE_DOLLAR}),
+            record(NOW - 300, {tokens: ONE_DOLLAR}),
+            record(NOW - 200, {tokens: ONE_DOLLAR}),
+        ]);
+        expect(c.weightBetween(NOW - 450, NOW - 250)).toBeCloseTo(2);   // the 400 and 300 ones
+        expect(c.weightBetween(NOW - 400, NOW - 300)).toBeCloseTo(1);   // from exclusive, to inclusive
+        expect(c.weightBetween(NOW - 600, NOW)).toBeCloseTo(4);
+        expect(c.weightBetween(NOW - 100, NOW)).toBe(0);
+        expect(c.weightBetween(NOW - 600, NOW - 550)).toBe(0);
+    });
+
+    it('counts a response exactly at the end, and not one exactly at the start', () => {
+        const c = collector([record(NOW - 400, {tokens: ONE_DOLLAR}), record(NOW - 300, {tokens: ONE_DOLLAR})]);
+        expect(c.weightBetween(NOW - 450, NOW - 300)).toBeCloseTo(2);     // end at the later one: included
+        expect(c.weightBetween(NOW - 400, NOW - 250)).toBeCloseTo(1);     // start at the earlier one: excluded
+    });
+
+    it('is 0 for an empty or backwards range', () => {
+        expect(collector([]).weightBetween(0, NOW)).toBe(0);
+        const c = collector([record(NOW - 100, {tokens: ONE_DOLLAR})]);
+        expect(c.weightBetween(NOW, NOW - 200)).toBe(0);
+    });
+
+    it('prices each model by its family', () => {
+        const c = collector([
+            record(NOW - 100, {model: 'claude-opus-5-5', tokens: ONE_DOLLAR}),
+            record(NOW - 90, {model: 'claude-haiku-5-5', tokens: ONE_DOLLAR}),
+        ]);
+        expect(c.weightBetween(NOW - 200, NOW)).toBeCloseTo(5 / 3 + 1 / 3);
+    });
+
+    it('follows additions, late (out of order) responses and pruning', () => {
+        const c = collector([record(NOW - 100, {tokens: ONE_DOLLAR})]);
+        expect(c.weightBetween(NOW - 300, NOW)).toBeCloseTo(1);
+        c.add(record(NOW - 50, {tokens: ONE_DOLLAR}));
+        expect(c.weightBetween(NOW - 300, NOW)).toBeCloseTo(2);
+        c.add(record(NOW - 200, {tokens: ONE_DOLLAR}));             // written late, but it happened earlier
+        expect(c.weightBetween(NOW - 300, NOW)).toBeCloseTo(3);
+        expect(c.weightBetween(NOW - 250, NOW - 150)).toBeCloseTo(1);
+        c.prune(NOW + WEEK_SECONDS - 120);                          // only the last two stay in the week
+        expect(c.weightBetween(NOW - 300, NOW)).toBeCloseTo(2);
+    });
+});

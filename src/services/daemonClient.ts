@@ -5,8 +5,8 @@ import GLib from 'gi://GLib';
 
 import {BUS_NAME, INTERFACE_NAME, INTERFACE_XML, OBJECT_PATH} from '../core/dbus.js';
 import {
-    decodeInsights, decodePlanUsage, decodeSessions, decodeUsage,
-    type AgentSession, type PlanUsage, type UsageSnapshot,
+    decodeInsights, decodePlanEstimate, decodePlanUsage, decodeSessions, decodeUsage,
+    type AgentSession, type PlanEstimate, type PlanUsage, type UsageSnapshot,
 } from '../core/protocol.js';
 import type {Insights} from '../core/usage/insights.js';
 
@@ -21,6 +21,8 @@ export interface DaemonState {
     available: boolean;
     usage: UsageSnapshot | null;
     plan: PlanUsage | null;
+    /** Where the 5-hour window probably is between measurements; shown only with its own reading. */
+    estimate: PlanEstimate | null;
     sessions: AgentSession[];
     insights: Insights | null;
 }
@@ -175,6 +177,7 @@ export class DaemonClient {
             available,
             usage: available ? decodeUsage(read('Usage')) : null,
             plan: available ? decodePlanUsage(read('PlanUsage')) : null,
+            estimate: available ? decodePlanEstimate(read('PlanEstimate')) : null,
             sessions: available ? decodeSessions(read('Sessions')) ?? [] : [],
             insights: available ? decodeInsights(read('Insights')) : null,
         });

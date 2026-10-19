@@ -11,6 +11,7 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import type {Capsule} from '../ui/capsule.js';
+import type {ClaudePanel} from '../ui/claudePanel.js';
 import type {ExpandedView} from '../ui/expandedView.js';
 
 const BUS_NAME = 'io.github.jagosar.IsletDebug';
@@ -45,7 +46,7 @@ export class DebugService {
     private readonly exported: Gio.DBusExportedObject;
     private readonly ownerId: number;
 
-    constructor(private readonly capsule: Capsule, private readonly expanded: ExpandedView) {
+    constructor(private readonly capsule: Capsule, private readonly expanded: ExpandedView, private readonly panel: ClaudePanel) {
         this.exported = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this.exported.export(Gio.DBus.session, OBJECT_PATH);
         this.ownerId = Gio.bus_own_name_on_connection(Gio.DBus.session, BUS_NAME, Gio.BusNameOwnerFlags.REPLACE, null, null);
@@ -61,6 +62,7 @@ export class DebugService {
             menuOpen: Boolean(menu.isOpen),
             page: this.expanded.selectedPage,
             pages: this.expanded.pageIds,
+            planBars: this.panel.planBars,
             keyFocus: describeFocus(global.stage.get_key_focus()),
             capsule: box(this.capsule.container),
             spacerWidth: this.capsule.mirrorWidth,

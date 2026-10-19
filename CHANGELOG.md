@@ -2,7 +2,19 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The plan bars were empty after the panel was closed and opened again** (the fill was sized
+  from a width that had not settled, and in the light theme the bar even shrank to a few
+  pixels). The bars are drawn from the width they have when painted, so they cannot go stale.
+
 ### Added
+
+- **The 5-hour figure moves once a minute:** between two measurements (the desktop app records
+  one every ~15 minutes) it is estimated from what you used since, at the pace learned from
+  your own history. It is shown as "≈" in the capsule and as a lighter part of the bar, and
+  the next measurement replaces it. On a real history it was off by 2.6 points on average over
+  15 minutes. Nothing is sent anywhere and no login is used.
 
 - **The Claude tab now follows the Claude desktop app's usage panel:** the plan limits; this
   session's cost, active and API time, changed lines, model mix and cache hits, with tokens and

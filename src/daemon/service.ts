@@ -6,10 +6,11 @@ import GLib from 'gi://GLib';
 import {parseAgentEvent} from '../core/agentEvents.js';
 import {INTERFACE_XML, MAX_METHOD_FIELDS, OBJECT_PATH} from '../core/dbus.js';
 import {RateLimiter, planUpdateActions} from '../core/limits.js';
+import {sameEstimate} from '../core/planEstimate.js';
 import {mergePlan} from '../core/planSources.js';
 import {
-    decodePlanUsage, encodeInsights, encodePlanUsage, encodeSessions, encodeUsage, parsePlanUsageReport,
-    type AgentSession, type PlanUsage, type UsageSnapshot,
+    decodePlanUsage, encodeInsights, encodePlanEstimate, encodePlanUsage, encodeSessions, encodeUsage, parsePlanUsageReport,
+    type AgentSession, type PlanEstimate, type PlanUsage, type UsageSnapshot,
 } from '../core/protocol.js';
 import type {Insights} from '../core/usage/insights.js';
 import type {StateStore} from './stateStore.js';
@@ -36,6 +37,7 @@ export class IsletService {
     private plan: PlanUsage | null;
     private sessions: AgentSession[] = [];
     private insights: Insights | null = null;
+    private estimate: PlanEstimate | null = null;
     /** Anything on the session bus can call the daemon: bursts are allowed, floods are dropped. */
     private readonly eventLimiter = new RateLimiter(50, 100);
     private readonly planLimiter = new RateLimiter(20, 40);
@@ -73,6 +75,10 @@ export class IsletService {
 
     get Insights(): string {
         return encodeInsights(this.insights);
+    }
+
+    get PlanEstimate(): string {
+        return encodePlanEstimate(this.estimate);
     }
 
     // D-Bus methods.
@@ -155,6 +161,19 @@ export class IsletService {
     setUsage(usage: UsageSnapshot): void {
         this.usage = usage;
         this.changed('Usage', this.Usage);
+    }
+
+    /** The measured plan figures, which an estimate is made from; null if none yet. */
+    get currentPlan(): PlanUsage | null {
+        return this.plan;
+    }
+
+    /** Publishes an estimate only when it would look different (see sameEstimate). */
+    setPlanEstimate(estimate: PlanEstimate | null): void {
+        if (sameEstimate(this.estimate, estimate))
+            return;
+        this.estimate = estimate;
+        this.changed('PlanEstimate', this.PlanEstimate);
     }
 
     setInsights(insights: Insights): void {

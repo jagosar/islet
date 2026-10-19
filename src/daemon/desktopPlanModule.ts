@@ -3,7 +3,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {DESKTOP_HISTORY_FILE, parseDesktopPlanHistory} from '../core/planSources.js';
+import type {PlanSample} from '../core/planEstimate.js';
+import {DESKTOP_HISTORY_FILE, parseDesktopPlanHistory, parseDesktopPlanSamples} from '../core/planSources.js';
 import type {IsletService} from './service.js';
 
 /** The app rewrites the file in one go; read once it settles. */
@@ -27,11 +28,19 @@ export class DesktopPlanModule {
     private monitor: Gio.FileMonitor | null = null;
     private debounceId = 0;
     private retryId = 0;
+    private history: PlanSample[] = [];
 
+    /** `onChange` runs after each read of the history (the estimator listens to it). */
     constructor(
         private readonly service: IsletService,
         private readonly path = desktopHistoryPath(),
+        private readonly onChange: () => void = () => undefined,
     ) {}
+
+    /** The samples of the history, oldest first. */
+    get samples(): readonly PlanSample[] {
+        return this.history;
+    }
 
     start(): void {
         const folder = GLib.path_get_dirname(this.path);
@@ -80,8 +89,10 @@ export class DesktopPlanModule {
         } catch {
             return; // No desktop app, or the file is being replaced: the next change reads it.
         }
+        this.history = parseDesktopPlanSamples(text) ?? [];
         const plan = parseDesktopPlanHistory(text);
         if (plan)
             this.service.reportPlanReading(plan);
+        this.onChange();
     }
 }

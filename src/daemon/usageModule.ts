@@ -62,10 +62,17 @@ export class UsageModule {
     private published = '';
     private lastPruneDay = '';
 
+    /** `onChange` runs after each publication of the usage (the plan estimator listens to it). */
     constructor(
         private readonly service: IsletService,
         private readonly root = projectsRoot(),
+        private readonly onChange: () => void = () => undefined,
     ) {}
+
+    /** What was consumed after `from` and up to `to` (Unix epoch seconds), in dollars at list prices. */
+    weightBetween(from: number, to: number): number {
+        return this.insights.weightBetween(from, to);
+    }
 
     start(): void {
         if (!GLib.file_test(this.root, GLib.FileTest.IS_DIR)) {
@@ -272,6 +279,7 @@ export class UsageModule {
             this.service.setUsage(snapshot);
         }
         this.publishInsights();
+        this.onChange();
     }
 
     private publishInsights(): void {

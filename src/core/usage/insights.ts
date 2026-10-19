@@ -152,6 +152,8 @@ export class InsightsCollector {
     private samples: Sample[] = [];
     private sorted = true;
     private readonly costStates = new Map<string, CostState>();
+    /** Running totals of the responses' weights, in time order; null until needed. */
+    private running: number[] | null = null;
 
     /** `clock` returns Unix epoch seconds; tests pass a fixed one. */
     constructor(private readonly clock: () => number = () => Date.now() / 1000) {}
@@ -167,11 +169,46 @@ export class InsightsCollector {
         const last = this.samples.at(-1);
         if (last && at < last.at)
             this.sorted = false;
+        this.running = null;
         this.samples.push({
             at, sessionId: record.sessionId, model: record.model, tokens: {...record.tokens},
             sidechain: record.sidechain, attribution: record.attribution,
             ...(record.project ? {project: record.project} : {}),
         });
+    }
+
+    /**
+     * What was consumed after `from` and up to `to` (Unix epoch seconds), in dollars at list
+     * prices. Cheap to call many times: it uses running totals that are rebuilt only after the
+     * responses change.
+     */
+    weightBetween(from: number, to: number): number {
+        if (!this.sorted) {
+            this.samples.sort((a, b) => a.at - b.at);
+            this.sorted = true;
+            this.running = null;
+        }
+        let running = this.running;
+        if (!running) {
+            let total = 0;
+            running = this.samples.map(sample => (total += requestWeight(sample.model, sample.tokens)));
+            this.running = running;
+        }
+        // Index of the first sample later than `time`: the number of samples at or before it.
+        const upTo = (time: number): number => {
+            let low = 0;
+            let high = this.samples.length;
+            while (low < high) {
+                const mid = (low + high) >> 1;
+                if (this.samples[mid].at <= time)
+                    low = mid + 1;
+                else
+                    high = mid;
+            }
+            return low;
+        };
+        const total = (count: number): number => (count === 0 ? 0 : running[count - 1]);
+        return to <= from ? 0 : total(upTo(to)) - total(upTo(from));
     }
 
     /** Claude Code's own totals for a session (its latest `cost-state`). */
@@ -183,6 +220,7 @@ export class InsightsCollector {
     prune(now: number): void {
         const cutoff = now - WEEK_SECONDS;
         this.samples = this.samples.filter(sample => sample.at > cutoff);
+        this.running = null;
         const live = new Set(this.samples.map(sample => sample.sessionId));
         for (const id of this.costStates.keys()) {
             if (!live.has(id))
@@ -198,6 +236,7 @@ export class InsightsCollector {
         if (!this.sorted) {
             this.samples.sort((a, b) => a.at - b.at);
             this.sorted = true;
+            this.running = null;
         }
         return {
             generatedAt: now,

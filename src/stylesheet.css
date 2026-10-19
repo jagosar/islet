@@ -69,22 +69,6 @@
   margin-top: 4px;
 }
 
-.islet-bar-track {
-  height: 6px;
-  border-radius: 3px;
-  background-color: rgba(127, 127, 127, 0.25);
-}
-
-.islet-bar-fill {
-  height: 6px;
-  border-radius: 3px;
-  background-color: #8fd18f;
-}
-
-.islet-bar-fill.islet-bar-high {
-  background-color: #f5a623;
-}
-
 .islet-sessions {
   spacing: 4px;
 }

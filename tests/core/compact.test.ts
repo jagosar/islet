@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-    PLAN_FRESH_SECONDS, compactClaudeText, currentPlanPercent, secondsUntilPlanExpires, todayFreshTokens,
+    PLAN_FRESH_SECONDS, compactClaudeText, currentPlanPercent, displayedPlanPercent, secondsUntilPlanExpires, todayFreshTokens,
 } from '../../src/core/compact.js';
 import type {PlanUsage, UsageSnapshot} from '../../src/core/protocol.js';
 
@@ -79,5 +79,31 @@ describe('compactClaudeText', () => {
         [null, null, 'Claude'],
     ])('%#: %s', (u, p, expected) => {
         expect(compactClaudeText(u, p, now)).toBe(expected);
+    });
+});
+
+describe('estimated plan percentage', () => {
+    const measured: PlanUsage = {measuredAt: now - 120, source: 'desktop', fiveHour: {usedPercentage: 27}};
+    const estimate = (fiveHour: number, basedOn = measured.measuredAt) => ({fiveHour, basedOn, at: now});
+
+    it('shows the estimate with a tilde while it extends this very reading', () => {
+        expect(displayedPlanPercent(measured, estimate(31.4), now)).toEqual({percent: 31, estimated: true});
+        expect(compactClaudeText(usage, measured, now, estimate(31.4))).toBe('Claude 1.12M · ≈31%');
+    });
+
+    it('shows the measurement when there is no estimate, or it is not above it', () => {
+        expect(displayedPlanPercent(measured, null, now)).toEqual({percent: 27, estimated: false});
+        expect(displayedPlanPercent(measured, estimate(27.4), now)).toEqual({percent: 27, estimated: false});
+        expect(compactClaudeText(usage, measured, now)).toBe('Claude 1.12M · 27%');
+    });
+
+    it('drops an estimate of an older reading at once: a new measurement wins', () => {
+        const newer: PlanUsage = {...measured, measuredAt: now - 10, fiveHour: {usedPercentage: 29}};
+        expect(displayedPlanPercent(newer, estimate(31, measured.measuredAt), now)).toEqual({percent: 29, estimated: false});
+    });
+
+    it('shows nothing when the reading is too old, estimate or not', () => {
+        const old: PlanUsage = {...measured, measuredAt: now - PLAN_FRESH_SECONDS - 1};
+        expect(displayedPlanPercent(old, estimate(35, old.measuredAt), now)).toBeNull();
     });
 });
