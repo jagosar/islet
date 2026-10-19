@@ -8,7 +8,9 @@ import {describeAgentEvent, parseAgentEvent} from '../../dist/core/agentEvents.j
 import {formatTokens} from '../../dist/core/format.js';
 import {hookFieldsFromJson} from '../../dist/core/hookInput.js';
 import {UsageAggregator, dayKey} from '../../dist/core/usage/aggregator.js';
-import {parseUsageLine} from '../../dist/core/usage/claudeTranscript.js';
+import {parseDesktopPlanHistory} from '../../dist/core/planSources.js';
+import {parseResetTime, parseUsageLine} from '../../dist/core/usage/claudeTranscript.js';
+import {InsightsCollector} from '../../dist/core/usage/insights.js';
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -37,6 +39,17 @@ check('hook fields keep non-ASCII paths and drop the message', fields,
     {session_id: 's', cwd: '/home/me/código/ñandú', hook_event_name: 'Notification', notification_type: 'permission_prompt'});
 check('an agent event becomes a live activity', describeAgentEvent(parseAgentEvent(fields)), 'ñandú needs your permission');
 check('token counts keep three significant digits', formatTokens(1_120_000), '1.12M');
+
+// Reset times convert a wall-clock time in a named zone: Intl with time zones, in SpiderMonkey.
+check('a limit reset time is read in its time zone',
+    parseResetTime('resets 4:20pm (Europe/Berlin)', Date.parse('2026-10-18T12:35:21Z')), Date.parse('2026-10-18T14:20:00Z') / 1000);
+check('a reset just before the autumn time change keeps summer time',
+    parseResetTime('resets 1:30am (Europe/Berlin)', Date.parse('2026-10-24T20:00:00Z')), Date.parse('2026-10-24T23:30:00Z') / 1000);
+check('the desktop app history is read', parseDesktopPlanHistory('{"version":2,"samples":[{"t":1000,"u":{"fh":45,"sd":20}}]}'),
+    {measuredAt: 1, source: 'desktop', fiveHour: {usedPercentage: 45}, sevenDay: {usedPercentage: 20}});
+const collector = new InsightsCollector(() => 1_792_400_000);
+collector.add({...parseUsageLine(line), timestamp: new Date(1_792_399_000_000).toISOString(), attribution: {skill: 'architect'}});
+check('insights attribute a response to its skill', collector.build(1_792_400_000).day.attribution.map(row => row.name), ['architect']);
 
 if (failures) {
     printerr(`${failures} GJS smoke check(s) failed`);

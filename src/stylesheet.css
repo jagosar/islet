@@ -205,3 +205,76 @@
 .islet-countdown {
   margin: 6px 0;
 }
+
+/* Usage view */
+
+.islet-pair {
+  spacing: 8px;
+}
+
+.islet-pair-value {
+  font-weight: bold;
+}
+
+.islet-usage-session,
+.islet-usage-limits {
+  spacing: 3px;
+}
+
+.islet-breakdown {
+  margin-top: 6px;
+  spacing: 2px;
+}
+
+.islet-breakdown-row {
+  spacing: 4px;
+}
+
+.islet-breakdown-label {
+  width: 92px;
+}
+
+.islet-breakdown-cell {
+  width: 72px;
+  text-align: right;
+}
+
+.islet-breakdown-head {
+  color: rgba(127, 127, 127, 1);
+}
+
+.islet-range {
+  font-size: 9pt;
+  padding: 1px 8px;
+  margin-left: 4px;
+  border-radius: 9px;
+}
+
+.islet-range:checked {
+  background-color: rgba(127, 127, 127, 0.25);
+}
+
+.islet-range:focus {
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.8);
+}
+
+.islet-share-row {
+  spacing: 2px;
+  margin-top: 3px;
+}
+
+.islet-share-kind {
+  margin-left: 6px;
+}
+
+.islet-share-track {
+  height: 4px;
+  border-radius: 2px;
+  background-color: rgba(127, 127, 127, 0.2);
+}
+
+.islet-share-fill {
+  height: 4px;
+  border-radius: 2px;
+  background-color: #6fa8dc;
+}

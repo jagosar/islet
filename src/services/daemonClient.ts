@@ -5,9 +5,10 @@ import GLib from 'gi://GLib';
 
 import {BUS_NAME, INTERFACE_NAME, INTERFACE_XML, OBJECT_PATH} from '../core/dbus.js';
 import {
-    decodePlanUsage, decodeSessions, decodeUsage,
+    decodeInsights, decodePlanUsage, decodeSessions, decodeUsage,
     type AgentSession, type PlanUsage, type UsageSnapshot,
 } from '../core/protocol.js';
+import type {Insights} from '../core/usage/insights.js';
 
 const SIGTERM = 15;
 const CALL_TIMEOUT_MS = 1000;
@@ -21,6 +22,7 @@ export interface DaemonState {
     usage: UsageSnapshot | null;
     plan: PlanUsage | null;
     sessions: AgentSession[];
+    insights: Insights | null;
 }
 
 export interface DaemonClientCallbacks {
@@ -174,6 +176,7 @@ export class DaemonClient {
             usage: available ? decodeUsage(read('Usage')) : null,
             plan: available ? decodePlanUsage(read('PlanUsage')) : null,
             sessions: available ? decodeSessions(read('Sessions')) ?? [] : [],
+            insights: available ? decodeInsights(read('Insights')) : null,
         });
     }
 }

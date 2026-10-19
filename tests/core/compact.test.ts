@@ -33,6 +33,16 @@ describe('currentPlanPercent', () => {
         expect(currentPlanPercent(plan, now)).toBe(33);
     });
 
+    it('shows a recent figure without a reset time (the desktop app records none)', () => {
+        const desktop: PlanUsage = {measuredAt: now - 600, source: 'desktop', fiveHour: {usedPercentage: 45}};
+        expect(currentPlanPercent(desktop, now)).toBe(45);
+        expect(secondsUntilPlanExpires(desktop, now)).toBe(PLAN_FRESH_SECONDS - 600);
+    });
+
+    it("keeps a figure for the desktop app's 15-minute sampling interval", () => {
+        expect(PLAN_FRESH_SECONDS).toBeGreaterThan(15 * 60);
+    });
+
     it('drops a figure older than the freshness limit', () => {
         expect(currentPlanPercent({...plan, measuredAt: now - PLAN_FRESH_SECONDS - 1}, now)).toBeNull();
     });

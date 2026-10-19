@@ -4,8 +4,10 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import System from 'system';
 
+import {planFromLimitHit} from '../core/planSources.js';
 import {UsageAggregator, dayKey} from '../core/usage/aggregator.js';
-import {mayHoldUsage, parseCostStateLine, parseUsageLine} from '../core/usage/claudeTranscript.js';
+import {mayHoldUsage, parseCostStateLine, parseLimitLine, parseUsageLine} from '../core/usage/claudeTranscript.js';
+import {InsightsCollector} from '../core/usage/insights.js';
 import {HISTORY_DAYS, buildUsageSnapshot} from '../core/usage/snapshot.js';
 import type {IsletService} from './service.js';
 
@@ -17,6 +19,8 @@ const DEBOUNCE_MS = 300;
 const MISSING_ROOT_RETRY_S = 300;
 /** Days kept beyond the 26 weeks shown, so a late-written old response still lands somewhere. */
 const PRUNE_MARGIN_DAYS = 7;
+/** The 24-hour and 7-day breakdowns slide with time, also while nothing is written. */
+const INSIGHTS_REFRESH_S = 10 * 60;
 
 interface Cursor {
     inode: string;
@@ -43,6 +47,9 @@ function localTimeZone(): string {
  */
 export class UsageModule {
     private readonly aggregator = new UsageAggregator(localTimeZone());
+    private readonly insights = new InsightsCollector();
+    private publishedInsights = '';
+    private refreshId = 0;
     private readonly timeZone = localTimeZone();
     private readonly cursors = new Map<string, Cursor>();
     private readonly monitors = new Map<string, Gio.FileMonitor>();
@@ -72,6 +79,10 @@ export class UsageModule {
         const cutoff = GLib.get_real_time() / 1_000_000 - (HISTORY_DAYS + 1) * 86400;
         this.watchTree(this.root, cutoff);
         this.scheduleMidnight();
+        this.refreshId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, INSIGHTS_REFRESH_S, () => {
+            this.publishInsights();
+            return GLib.SOURCE_CONTINUE;
+        });
         this.drain();
     }
 
@@ -231,12 +242,20 @@ export class UsageModule {
             return;
         const record = parseUsageLine(line);
         if (record) {
-            this.aggregator.add(record);
+            if (this.aggregator.add(record))
+                this.insights.add(record);
             return;
         }
         const costState = parseCostStateLine(line);
-        if (costState)
+        if (costState) {
             this.aggregator.setSessionReference(costState.sessionId, costState.models);
+            this.insights.setCostState(costState);
+            return;
+        }
+        const hit = parseLimitLine(line);
+        const plan = hit && planFromLimitHit(hit, Math.floor(GLib.get_real_time() / 1_000_000));
+        if (plan)
+            this.service.reportPlanReading(plan);
     }
 
     private publish(): void {
@@ -248,10 +267,23 @@ export class UsageModule {
         }
         const snapshot = buildUsageSnapshot(this.aggregator.byDay(), today);
         const text = JSON.stringify(snapshot);
-        if (text === this.published)
+        if (text !== this.published) {
+            this.published = text;
+            this.service.setUsage(snapshot);
+        }
+        this.publishInsights();
+    }
+
+    private publishInsights(): void {
+        const now = Math.floor(GLib.get_real_time() / 1_000_000);
+        this.insights.prune(now);
+        const insights = this.insights.build(now);
+        // generatedAt changes every time; publish only when the figures do.
+        const text = JSON.stringify({...insights, generatedAt: 0});
+        if (text === this.publishedInsights)
             return;
-        this.published = text;
-        this.service.setUsage(snapshot);
+        this.publishedInsights = text;
+        this.service.setInsights(insights);
     }
 
     /** "Today" changes at local midnight even when nothing is written. */

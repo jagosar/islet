@@ -12,11 +12,15 @@ playing and a focus timer, right next to the clock. Local-first: no accounts, no
 - **The capsule**, next to the clock: what needs you first (`islet needs permission`), then a
   running focus timer, then today's Claude Code usage (`Claude 1.21M · 33%`), then the song.
 - **Live activities** that grow the capsule for a few seconds: an agent waiting for your
-  permission or input, a finished reply, the 5-hour plan crossing 75 % and 90 %, a focus session
+  permission or input, a finished reply, the 5-hour plan crossing 75 %, 90 % and 100 %, a focus session
   ending, a new song.
 - **The expanded view** (click, or `Ctrl+Alt+Space`):
-  - **Claude:** today's fresh tokens with the breakdown, the 5-hour and weekly plan windows,
-    the current sessions and their state, and a 26-week usage graph.
+  - **Claude:** today's fresh tokens with the breakdown, the current sessions and their state,
+    and a 26-week usage graph.
+  - **Usage:** the 5-hour and weekly plan limits; this session's cost, active time, models and
+    cache hits, with tokens and cost per model; and what is using your limits over 24 hours or
+    7 days (long context, long or parallel sessions, and each MCP server, skill and subagent),
+    like the usage panel of the Claude desktop app.
   - **Music:** any MPRIS player (Spotify, browsers, Rhythmbox…), with play/pause, previous, next.
   - **Focus:** 25 / 50 / 90 minute sessions with pause and stop, and today's and the week's totals.
 
@@ -72,9 +76,13 @@ things to `~/.claude/settings.json`:
 
 - **Hooks**, so the capsule knows when a session needs your permission, waits for you or
   finishes. They work in the terminal, the desktop app and VS Code.
-- **A status line**, the only place Claude Code reports your plan's 5-hour and weekly usage.
-  Only terminal sessions run status lines, so those figures refresh while you use Claude in a
-  terminal. If you already have a status line, it keeps working unchanged through Islet.
+- **A status line**, through which terminal sessions report your plan's 5-hour and weekly
+  usage with their reset times. If you already have a status line, it keeps working unchanged
+  through Islet.
+
+Plan usage also comes, without any setup, from the Claude desktop app (which records it every
+15 minutes or so while it runs) and from Claude Code's "You've hit your limit" messages. Islet
+reads these local files only: it never uses your login or the network.
 
 Islet keeps everything else in the file, saves a backup, shows the exact change before making it,
 and Disconnect (or `./uninstall.sh`) removes exactly what it added. If Islet is ever removed

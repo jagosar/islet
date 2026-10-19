@@ -6,10 +6,12 @@ import GLib from 'gi://GLib';
 import {parseAgentEvent} from '../core/agentEvents.js';
 import {INTERFACE_XML, MAX_METHOD_FIELDS, OBJECT_PATH} from '../core/dbus.js';
 import {RateLimiter, planUpdateActions} from '../core/limits.js';
+import {mergePlan} from '../core/planSources.js';
 import {
-    decodePlanUsage, encodePlanUsage, encodeSessions, encodeUsage, parsePlanUsageReport,
+    decodePlanUsage, encodeInsights, encodePlanUsage, encodeSessions, encodeUsage, parsePlanUsageReport,
     type AgentSession, type PlanUsage, type UsageSnapshot,
 } from '../core/protocol.js';
+import type {Insights} from '../core/usage/insights.js';
 import type {StateStore} from './stateStore.js';
 
 const PLAN_USAGE_FILE = 'plan-usage.json';
@@ -33,6 +35,7 @@ export class IsletService {
     private usage: UsageSnapshot = {today: null, history: []};
     private plan: PlanUsage | null;
     private sessions: AgentSession[] = [];
+    private insights: Insights | null = null;
     /** Anything on the session bus can call the daemon: bursts are allowed, floods are dropped. */
     private readonly eventLimiter = new RateLimiter(50, 100);
     private readonly planLimiter = new RateLimiter(20, 40);
@@ -68,6 +71,10 @@ export class IsletService {
         return encodeSessions(this.sessions);
     }
 
+    get Insights(): string {
+        return encodeInsights(this.insights);
+    }
+
     // D-Bus methods.
 
     ReportAgentEvent(fields: Record<string, string>): void {
@@ -92,8 +99,13 @@ export class IsletService {
     /** Plan usage from the spool, applied only if it is newer than what the daemon knows. */
     replayPlanUsage(fields: Record<string, number>, at: number): void {
         const plan = parsePlanUsageReport(fields, at);
-        if (plan && (!this.plan || plan.measuredAt >= this.plan.measuredAt))
+        if (plan)
             this.updatePlan(plan);
+    }
+
+    /** A plan reading from the desktop app's history or a limit message (see planSources.ts). */
+    reportPlanReading(plan: PlanUsage): void {
+        this.updatePlan(plan);
     }
 
     ReportPlanUsage(fields: Record<string, number>): void {
@@ -109,9 +121,15 @@ export class IsletService {
         this.updatePlan(plan);
     }
 
-    /** The latest report is always kept; clients and the disk hear of it when it matters (see planUpdateActions). */
-    private updatePlan(plan: PlanUsage): void {
+    /**
+     * Merges a reading into the current figures (an older reading changes nothing). The result is
+     * always kept; clients and the disk hear of it when it matters (see planUpdateActions).
+     */
+    private updatePlan(reading: PlanUsage): void {
         const now = nowSeconds();
+        const plan = mergePlan(this.plan, reading, now);
+        if (plan === this.plan)
+            return;
         const {publish, persist} = planUpdateActions(this.plan, plan, this.lastPlan, now);
         this.plan = plan;
         if (persist) {
@@ -137,6 +155,11 @@ export class IsletService {
     setUsage(usage: UsageSnapshot): void {
         this.usage = usage;
         this.changed('Usage', this.Usage);
+    }
+
+    setInsights(insights: Insights): void {
+        this.insights = insights;
+        this.changed('Insights', this.Insights);
     }
 
     setSessions(sessions: AgentSession[]): void {

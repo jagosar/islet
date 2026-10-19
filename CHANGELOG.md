@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Usage tab**, like the Claude desktop app's usage panel: plan limits; this session's cost,
+  active and API time, changed lines, model mix and cache hits, with tokens and cost per model;
+  and what is using your limits over 24 hours or 7 days, from the attribution Claude Code
+  records for its own `/usage` (MCP servers, skills, subagents, plugins) and behaviours such as
+  long context, long sessions and parallel sessions.
+- **Plan usage without a terminal session:** from the Claude desktop app's local history
+  (`~/.config/Claude/plan-usage-history.json`) and from "You've hit your limit · resets …"
+  messages, merged with the status line figures. A live activity also announces 100 %.
+
+### Changed
+
+- The plan bars moved from the Claude tab to the Usage tab. A plan figure is shown in the
+  capsule for 30 minutes after it was measured (was 15).
+
 ## 0.1.2 — 2026-10-17
 
 Ready for extensions.gnome.org review; no change in behaviour.

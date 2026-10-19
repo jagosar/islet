@@ -9,11 +9,9 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 
 import {todayFreshTokens} from '../core/compact.js';
 import {formatTokens} from '../core/format.js';
-import {HEATMAP_WEEKS, formatAgo, formatDuration, heatmapCells, sessionStateLabel, type HeatmapCell} from '../core/panel.js';
-import type {PlanWindow} from '../core/protocol.js';
+import {HEATMAP_WEEKS, formatDuration, heatmapCells, sessionStateLabel, type HeatmapCell} from '../core/panel.js';
 import {freshTokens, processedTokens, type TokenCounts} from '../core/usage/claudeTranscript.js';
 import type {DaemonState} from '../services/daemonClient.js';
-import {formatLocal} from '../services/localTime.js';
 
 const CELL = 9;
 const GAP = 2;
@@ -71,51 +69,6 @@ class Heatmap extends St.DrawingArea {
     }
 }
 
-/** A labelled bar for one plan window. */
-class PlanBar extends St.BoxLayout {
-    static {
-        GObject.registerClass(this);
-    }
-
-    private readonly value: St.Label;
-    private readonly fill: St.Widget;
-    private readonly track: St.Widget;
-    private fraction = 0;
-
-    constructor(title: string) {
-        super({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-plan-bar', x_expand: true});
-        const header = new St.BoxLayout({x_expand: true});
-        header.add_child(label(title, 'islet-caption'));
-        this.value = label('', 'islet-caption islet-plan-value');
-        this.value.x_expand = true;
-        this.value.x_align = Clutter.ActorAlign.END;
-        header.add_child(this.value);
-        this.add_child(header);
-
-        this.track = new St.Widget({style_class: 'islet-bar-track', x_expand: true});
-        this.fill = new St.Widget({style_class: 'islet-bar-fill'});
-        this.track.add_child(this.fill);
-        this.add_child(this.track);
-        // The fill is a share of the track, whose width is known only once allocated.
-        this.track.connect('notify::width', () => this.layoutFill());
-    }
-
-    private layoutFill(): void {
-        this.fill.set_width(Math.round(this.track.width * this.fraction));
-    }
-
-    setWindow(window: PlanWindow | undefined): void {
-        this.visible = Boolean(window);
-        if (!window)
-            return;
-        const percent = Math.round(window.usedPercentage);
-        this.value.text = _('%s · resets %s').replace('%s', `${percent}%`).replace('%s', formatLocal(window.resetsAt, '%H:%M'));
-        this.fraction = Math.min(100, window.usedPercentage) / 100;
-        this.layoutFill();
-        this.fill.set_style_class_name(percent >= 90 ? 'islet-bar-fill islet-bar-high' : 'islet-bar-fill');
-    }
-}
-
 /** The Claude Code view of the expanded island. */
 export class ClaudePanel extends St.BoxLayout {
     static {
@@ -125,9 +78,6 @@ export class ClaudePanel extends St.BoxLayout {
     private readonly todayValue = label('—', 'islet-big-number');
     private readonly todayDetail = label('', 'islet-caption');
     private readonly todayProcessed = label('', 'islet-caption');
-    private readonly fiveHour = new PlanBar(_('5-hour limit'));
-    private readonly weekly = new PlanBar(_('Weekly limit'));
-    private readonly planNote = label('', 'islet-note');
     private readonly sessionsBox = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-sessions'});
     private readonly heatmap = new Heatmap();
     private state: DaemonState | null = null;
@@ -142,11 +92,6 @@ export class ClaudePanel extends St.BoxLayout {
         this.add_child(today);
         this.add_child(this.todayDetail);
         this.add_child(this.todayProcessed);
-
-        this.add_child(label(_('Plan usage'), 'islet-section-title'));
-        this.add_child(this.fiveHour);
-        this.add_child(this.weekly);
-        this.add_child(this.planNote);
 
         this.add_child(label(_('Sessions'), 'islet-section-title'));
         this.add_child(this.sessionsBox);
@@ -191,13 +136,6 @@ export class ClaudePanel extends St.BoxLayout {
                 ? _('%s processed, including cache reads').replace('%s', formatTokens(processedTokens(total)))
                 : '';
         }
-
-        const plan = state.plan;
-        this.fiveHour.setWindow(plan?.fiveHour);
-        this.weekly.setWindow(plan?.sevenDay);
-        this.planNote.text = plan
-            ? _('Measured %s in a terminal session.').replace('%s', formatAgo(now - plan.measuredAt, _))
-            : _('Appears after Claude replies in a terminal session (the desktop app and VS Code do not report it).');
 
         this.sessionsBox.destroy_all_children();
         if (!state.sessions.length)
