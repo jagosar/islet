@@ -4,7 +4,7 @@ A small dynamic island for the GNOME top bar: Claude Code usage and live agent a
 playing and a focus timer, right next to the clock. Local-first: no accounts, no telemetry.
 
 <p align="center">
-  <img src="docs/assets/claude-panel.png" alt="The capsule next to the clock showing Claude 1.21M · 93%, and the Claude panel: today's tokens, plan usage bars, sessions and a 26-week graph" width="380">
+  <img src="docs/assets/claude-panel.png" alt="The capsule next to the clock showing an agent waiting for permission, and the Claude tab: plan limits, sessions, this session's cost and tokens per model, and what is using the limits" width="380">
 </p>
 
 ## What it shows
@@ -15,12 +15,11 @@ playing and a focus timer, right next to the clock. Local-first: no accounts, no
   permission or input, a finished reply, the 5-hour plan crossing 75 %, 90 % and 100 %, a focus session
   ending, a new song.
 - **The expanded view** (click, or `Ctrl+Alt+Space`):
-  - **Claude:** today's fresh tokens with the breakdown, the current sessions and their state,
-    and a 26-week usage graph.
-  - **Usage:** the 5-hour and weekly plan limits; this session's cost, active time, models and
-    cache hits, with tokens and cost per model; and what is using your limits over 24 hours or
-    7 days (long context, long or parallel sessions, and each MCP server, skill and subagent),
-    like the usage panel of the Claude desktop app.
+  - **Claude:** like the usage panel of the Claude desktop app. The 5-hour and weekly plan
+    limits; the current sessions and what each is waiting for; this session's cost, active time,
+    models and cache hits, with tokens and cost per model; and what is using your limits over
+    24 hours or 7 days (long context, long or parallel sessions, and each MCP server, skill and
+    subagent).
   - **Music:** any MPRIS player (Spotify, browsers, Rhythmbox…), with play/pause, previous, next.
   - **Focus:** 25 / 50 / 90 minute sessions with pause and stop, and today's and the week's totals.
 
@@ -92,18 +91,6 @@ without disconnecting, its hooks do nothing and your old status line still runs.
 
 Everything stays on this computer. Islet reads token counts and session events, never your
 prompts or Claude's replies, and sends nothing anywhere.
-
-## Performance
-
-Measured on the development machine (Ubuntu 26.04, GNOME 50.1), daemon on GJS 1.88:
-
-| Transcripts | First scan | Daemon memory (RSS) | Daemon CPU while idle |
-|---|---|---|---|
-| A real `~/.claude` (a few MB) | under 1 s | 38 MB | 0 ms per 30 s |
-| Heavy use: 207 MB, 60,000 responses over 26 weeks | ~1 s | 45 MB | 0 ms per 30 s |
-
-An empty GJS process takes about 31 MB. The extension adds no timers while nothing changes; the
-focus countdown ticks once per second only while it runs.
 
 ## Performance
 

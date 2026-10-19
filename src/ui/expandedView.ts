@@ -47,6 +47,11 @@ export class ExpandedView extends St.BoxLayout {
         return this.selected;
     }
 
+    /** The ids of the pages, in tab order. */
+    get pageIds(): string[] {
+        return [...this.pages.keys()];
+    }
+
     /** Gives keyboard focus to the selected tab, so Tab and the arrows work right away. */
     focusSelectedTab(): void {
         this.buttons.get(this.selected)?.grab_key_focus();
