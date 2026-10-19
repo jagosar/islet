@@ -48,18 +48,10 @@
   margin-top: 10px;
 }
 
-.islet-today {
-  spacing: 6px;
-}
-
 .islet-big-number {
   font-size: 22pt;
   font-weight: 300;
   font-feature-settings: "tnum";
-}
-
-.islet-unit {
-  margin-top: 14px;
 }
 
 .islet-caption {
@@ -119,10 +111,6 @@
 
 .islet-state-working {
   background-color: #8fd18f;
-}
-
-.islet-heatmap {
-  margin-top: 4px;
 }
 
 /* Tabs, buttons, music and focus */

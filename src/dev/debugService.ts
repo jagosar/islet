@@ -60,6 +60,7 @@ export class DebugService {
             available: this.capsule.isAvailable,
             menuOpen: Boolean(menu.isOpen),
             page: this.expanded.selectedPage,
+            pages: this.expanded.pageIds,
             keyFocus: describeFocus(global.stage.get_key_focus()),
             capsule: box(this.capsule.container),
             spacerWidth: this.capsule.mirrorWidth,

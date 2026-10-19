@@ -139,7 +139,9 @@ GSettings (`org.gnome.shell.extensions.islet`), edited in a libadwaita preferenc
   limited (50 per second, bursts of 100) and `ReportPlanUsage` too (20 per second, bursts of 40);
   the excess is dropped with one warning per 5 seconds. At most 200 sessions are tracked (the one
   quiet the longest is forgotten first), and the aggregator forgets sessions and response ids
-  older than the 26 weeks shown, plus a week, once a day.
+  older than the 26 weeks kept, plus a week, once a day. (The 26-week graph is gone from the UI
+  since 0.2.0, so only today's total still needs this history; shortening it would also shorten
+  the first scan and lower the daemon's memory.)
 - **Plan usage is not re-announced for nothing.** Claude Code runs the status line several times
   per second during a reply with the same figures. A change in the figures is published and saved
   at once; the same figures only refresh "measured at" every 30 seconds.
@@ -204,7 +206,7 @@ work: no watchers, no timers, no processes.
   session's last day. The UI never calls a running session's figures exact, and leads with
   fresh tokens, which the auxiliary calls barely affect. `scripts/usage-report.mjs` repeats the
   comparison on any machine.
-- ~~No API-equivalent cost in v1~~ **Revised in 0.2.0:** the Usage tab shows the current
+- ~~No API-equivalent cost in v1~~ **Revised in 0.2.0:** the Claude tab shows the current
   session's cost, like Claude Code's own `/usage` and the desktop app do. An ended session shows
   Claude Code's own figure from its `cost-state` (exact). A running one is estimated at public list
   prices by model family (Opus $5, Sonnet $3, Haiku $1 per million input tokens; cache write
@@ -244,7 +246,7 @@ Status line details:
   and the compact capsule should not lead with a stale percentage.
 - Never computed from token counts. Never read from the OAuth token or undocumented endpoints.
 
-**Claude Code — what is using your limits** (the Usage tab, since 0.2.0)
+**Claude Code — what is using your limits** (the Claude tab, since 0.2.0)
 - Claude Code records, on every response in its transcripts, what its own `/usage` breakdown
   attributes it to: `attributionMcpServer`, `attributionSkill`, `attributionAgent`,
   `attributionPlugin`. Islet reads these names (configuration names, not content) and the token

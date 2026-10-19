@@ -65,6 +65,7 @@ sleep 2
 echo "capsule and usage"
 wait_for 20 shown_is 'Claude 1.00K' ; check "today's fresh tokens from the transcripts" "$(shown)" "Claude 1.00K"
 check "the daemon is available" "$(field "['available']")" "True"
+check "one tab per subject: Claude, Music, Focus" "$(field "['pages']")" "['claude', 'media', 'focus']"
 clock_centre="$(field "['clock']['center']")"; stage_half="$(( $(field "['stageWidth']") / 2 ))"
 check "the clock stays centred" "$clock_centre" "$stage_half"
 
@@ -97,7 +98,6 @@ if [ -n "${E2E_KEYBOARD:-}" ]; then
     debug keys Control_L+Alt_L+space; sleep 0.8
     check "the shortcut opens the island" "$(field "['menuOpen']")" "True"
     check "focus lands on the Claude tab" "$(field "['keyFocus']")" "St_Button:islet-tab:Claude"
-    debug keys Right; sleep 0.4; check "Right switches to Usage" "$(field "['page']")" "usage"
     debug keys Right; sleep 0.4; check "Right switches to Music" "$(field "['page']")" "media"
     debug keys Right; sleep 0.4; check "Right switches to Focus" "$(field "['page']")" "focus"
     debug keys Escape; sleep 0.6; check "Escape closes" "$(field "['menuOpen']")" "False"

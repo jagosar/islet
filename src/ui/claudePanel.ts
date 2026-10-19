@@ -3,106 +3,125 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {todayFreshTokens} from '../core/compact.js';
-import {formatTokens} from '../core/format.js';
-import {HEATMAP_WEEKS, formatDuration, heatmapCells, sessionStateLabel, type HeatmapCell} from '../core/panel.js';
-import {freshTokens, processedTokens, type TokenCounts} from '../core/usage/claudeTranscript.js';
+import {formatDuration, sessionStateLabel} from '../core/panel.js';
+import type {InsightsWindow, SessionSummary} from '../core/usage/insights.js';
+import {
+    attributionKindLabel, attributionName, breakdownTable, flagLabel, formatShare, formatUsd, modelMix,
+} from '../core/usageView.js';
 import type {DaemonState} from '../services/daemonClient.js';
-
-const CELL = 9;
-const GAP = 2;
-/** Opacity of the theme's foreground colour for each heatmap level. */
-const LEVEL_ALPHA = [0.08, 0.3, 0.5, 0.72, 0.95];
+import {PlanBar, planNote} from './planBar.js';
 
 function label(text: string, styleClass: string): St.Label {
     return new St.Label({text, style_class: styleClass, x_align: Clutter.ActorAlign.START});
 }
 
-function sumTokens(models: Record<string, TokenCounts>): TokenCounts {
-    const total: TokenCounts = {input: 0, cacheWrite: 0, cacheRead: 0, output: 0};
-    for (const tokens of Object.values(models)) {
-        total.input += tokens.input;
-        total.cacheWrite += tokens.cacheWrite;
-        total.cacheRead += tokens.cacheRead;
-        total.output += tokens.output;
-    }
-    return total;
+/** A caption or note that wraps onto more lines instead of being cut off at the panel's width. */
+function note(text: string): St.Label {
+    const wrapped = label(text, 'islet-note');
+    wrapped.x_expand = true;
+    wrapped.clutter_text.line_wrap = true;
+    wrapped.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+    return wrapped;
 }
 
-/** The 26-week usage graph, drawn in one actor with Cairo in the theme's text colour. */
-class Heatmap extends St.DrawingArea {
-    static {
-        GObject.registerClass(this);
-    }
-
-    private cells: HeatmapCell[][] = [];
-
-    constructor() {
-        super({
-            style_class: 'islet-heatmap',
-            width: HEATMAP_WEEKS * (CELL + GAP) - GAP,
-            height: 7 * (CELL + GAP) - GAP,
-        });
-        this.accessible_name = _('Usage over the last 26 weeks');
-    }
-
-    setCells(cells: HeatmapCell[][]): void {
-        this.cells = cells;
-        this.queue_repaint();
-    }
-
-    override vfunc_repaint(): void {
-        const cr = this.get_context();
-        const color = this.get_theme_node().get_foreground_color();
-        this.cells.forEach((column, x) => column.forEach((cell, y) => {
-            if (!cell.inRange)
-                return;
-            cr.setSourceRGBA(color.red / 255, color.green / 255, color.blue / 255, LEVEL_ALPHA[cell.level]);
-            cr.rectangle(x * (CELL + GAP), y * (CELL + GAP), CELL, CELL);
-            cr.fill();
-        }));
-        cr.$dispose();
-    }
+/** "Cost  $86.50" style row: a caption on the left, its value on the right. */
+function pair(caption: string, value: string): St.BoxLayout {
+    const row = new St.BoxLayout({style_class: 'islet-pair', x_expand: true});
+    row.add_child(label(caption, 'islet-caption islet-pair-caption'));
+    const valueLabel = label(value, 'islet-caption islet-pair-value');
+    valueLabel.x_expand = true;
+    valueLabel.x_align = Clutter.ActorAlign.END;
+    row.add_child(valueLabel);
+    return row;
 }
 
-/** The Claude Code view of the expanded island. */
+/** A share row: label, a thin bar and the percentage. */
+function shareRow(text: string, detail: string, share: number): St.BoxLayout {
+    const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-share-row', x_expand: true});
+    const header = new St.BoxLayout({x_expand: true});
+    const name = label(text, 'islet-caption islet-share-name');
+    name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+    header.add_child(name);
+    if (detail)
+        header.add_child(label(detail, 'islet-note islet-share-kind'));
+    const value = label(formatShare(share), 'islet-caption islet-pair-value');
+    value.x_expand = true;
+    value.x_align = Clutter.ActorAlign.END;
+    header.add_child(value);
+    box.add_child(header);
+
+    const track = new St.Widget({style_class: 'islet-share-track', x_expand: true});
+    const fill = new St.Widget({style_class: 'islet-share-fill'});
+    track.add_child(fill);
+    track.connect('notify::width', () => fill.set_width(Math.round(track.width * Math.min(1, share))));
+    box.add_child(track);
+    return box;
+}
+
+/**
+ * The Claude view of the expanded island: plan limits, who is waiting for you, the current
+ * session and what is using the limits, like the Claude desktop app's usage panel, from what
+ * Claude Code records on this computer.
+ */
 export class ClaudePanel extends St.BoxLayout {
     static {
         GObject.registerClass(this);
     }
 
-    private readonly todayValue = label('—', 'islet-big-number');
-    private readonly todayDetail = label('', 'islet-caption');
-    private readonly todayProcessed = label('', 'islet-caption');
-    private readonly sessionsBox = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-sessions'});
-    private readonly heatmap = new Heatmap();
+    private readonly fiveHour = new PlanBar(_('Session limit (5 hours)'));
+    private readonly weekly = new PlanBar(_('Weekly limit'), '%a %H:%M');
+    private readonly planNote = note('');
+    private readonly agentsTitle = label(_('Sessions'), 'islet-section-title');
+    private readonly agentsBox = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-sessions'});
+    private readonly sessionTitle = label(_('This session'), 'islet-section-title');
+    private readonly sessionBox = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-usage-session'});
+    private readonly dayButton: St.Button;
+    private readonly weekButton: St.Button;
+    private readonly limitsBox = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-usage-limits'});
+    private range: 'day' | 'week' = 'day';
     private state: DaemonState | null = null;
 
     constructor() {
         super({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-panel', x_expand: true});
 
-        this.add_child(label(_('Today'), 'islet-section-title'));
-        const today = new St.BoxLayout({style_class: 'islet-today'});
-        today.add_child(this.todayValue);
-        today.add_child(label(_('fresh tokens'), 'islet-caption islet-unit'));
-        this.add_child(today);
-        this.add_child(this.todayDetail);
-        this.add_child(this.todayProcessed);
+        this.add_child(label(_('Plan usage'), 'islet-section-title'));
+        this.add_child(this.fiveHour);
+        this.add_child(this.weekly);
+        this.add_child(this.planNote);
 
-        this.add_child(label(_('Sessions'), 'islet-section-title'));
-        this.add_child(this.sessionsBox);
+        this.add_child(this.agentsTitle);
+        this.add_child(this.agentsBox);
 
-        this.add_child(label(_('Last 26 weeks'), 'islet-section-title'));
-        this.add_child(this.heatmap);
+        this.add_child(this.sessionTitle);
+        this.add_child(this.sessionBox);
 
-        this.add_child(label(_('Figures of running sessions are approximate until they end.'), 'islet-note'));
+        const header = new St.BoxLayout({x_expand: true});
+        const title = label(_('What is using your limits'), 'islet-section-title');
+        title.x_expand = true;
+        header.add_child(title);
+        this.dayButton = this.rangeButton(_('24 h'), 'day');
+        this.weekButton = this.rangeButton(_('7 days'), 'week');
+        header.add_child(this.dayButton);
+        header.add_child(this.weekButton);
+        this.add_child(header);
+        this.add_child(this.limitsBox);
+        this.add_child(note(_('Approximate and overlapping; this computer only, not claude.ai.')));
 
-        // Bar widths depend on the track width, known only after allocation.
         this.connect('notify::mapped', () => this.mapped && this.refresh());
+    }
+
+    private rangeButton(text: string, range: 'day' | 'week'): St.Button {
+        const button = new St.Button({label: text, style_class: 'islet-range', can_focus: true, y_align: Clutter.ActorAlign.END});
+        button.connect('clicked', () => {
+            this.range = range;
+            this.refresh();
+        });
+        return button;
     }
 
     update(state: DaemonState): void {
@@ -110,37 +129,33 @@ export class ClaudePanel extends St.BoxLayout {
         this.refresh();
     }
 
-    /** Re-renders, including the relative times ("5 min ago"). */
     refresh(): void {
         const state = this.state;
         if (!state)
             return;
         const now = Math.floor(GLib.get_real_time() / 1_000_000);
 
-        if (!state.available) {
-            this.todayValue.text = '—';
-            this.todayDetail.text = _('Islet is starting or not running.');
-            this.todayProcessed.text = '';
-        } else {
-            const models = state.usage?.today?.models ?? {};
-            const total = sumTokens(models);
-            this.todayValue.text = formatTokens(todayFreshTokens(state.usage));
-            const used = freshTokens(total) > 0;
-            this.todayDetail.text = used
-                ? _('input %s · cache write %s · output %s')
-                    .replace('%s', formatTokens(total.input))
-                    .replace('%s', formatTokens(total.cacheWrite))
-                    .replace('%s', formatTokens(total.output))
-                : _('No Claude Code usage yet today.');
-            this.todayProcessed.text = used
-                ? _('%s processed, including cache reads').replace('%s', formatTokens(processedTokens(total)))
-                : '';
-        }
+        this.fiveHour.setWindow(state.plan?.fiveHour);
+        this.weekly.setWindow(state.plan?.sevenDay);
+        this.planNote.text = state.available ? planNote(state.plan, now) : _('Islet is starting or not running.');
 
-        this.sessionsBox.destroy_all_children();
-        if (!state.sessions.length)
-            this.sessionsBox.add_child(label(_('No active sessions.'), 'islet-note'));
-        for (const session of state.sessions) {
+        this.renderAgents(state, now);
+
+        this.dayButton.checked = this.range === 'day';
+        this.weekButton.checked = this.range === 'week';
+
+        this.renderSession(state.insights?.session ?? null);
+        const window = state.insights ? state.insights[this.range] : null;
+        this.renderLimits(window);
+    }
+
+    /** Who is working or waiting for you; the whole section is hidden when nothing runs. */
+    private renderAgents(state: DaemonState, now: number): void {
+        this.agentsBox.destroy_all_children();
+        const sessions = state.available ? state.sessions : [];
+        this.agentsTitle.visible = sessions.length > 0;
+        this.agentsBox.visible = sessions.length > 0;
+        for (const session of sessions) {
             const row = new St.BoxLayout({style_class: 'islet-session-row', x_expand: true});
             row.add_child(new St.Widget({style_class: `islet-state-dot islet-state-${session.state}`, y_align: Clutter.ActorAlign.CENTER}));
             row.add_child(label(session.project, 'islet-session-project'));
@@ -148,10 +163,58 @@ export class ClaudePanel extends St.BoxLayout {
             detail.x_expand = true;
             detail.x_align = Clutter.ActorAlign.END;
             row.add_child(detail);
-            this.sessionsBox.add_child(row);
+            this.agentsBox.add_child(row);
+        }
+    }
+
+    private renderSession(session: SessionSummary | null): void {
+        this.sessionBox.destroy_all_children();
+        this.sessionTitle.text = session?.project ? _('This session · %s').replace('%s', session.project) : _('This session');
+        if (!session) {
+            this.sessionBox.add_child(note(_('No Claude Code session in the last 7 days.')));
+            return;
         }
 
-        const today = GLib.DateTime.new_now_local().format('%Y-%m-%d') ?? '';
-        this.heatmap.setCells(heatmapCells(state.usage, today));
+        const cost = session.exact ? formatUsd(session.usd) : `≈ ${formatUsd(session.usd)}`;
+        this.sessionBox.add_child(pair(_('Cost'), cost));
+        this.sessionBox.add_child(pair(_('Active'), formatDuration(session.activeSeconds, _)));
+        if (session.apiSeconds !== undefined)
+            this.sessionBox.add_child(pair(_('API'), formatDuration(session.apiSeconds, _)));
+        if (session.linesAdded !== undefined || session.linesRemoved !== undefined)
+            this.sessionBox.add_child(pair(_('Lines'), `+${session.linesAdded ?? 0} −${session.linesRemoved ?? 0}`));
+        this.sessionBox.add_child(pair(_('Models'), modelMix(session)));
+        this.sessionBox.add_child(pair(_('Cache hits'), formatShare(session.cacheHitRatio)));
+
+        const table = breakdownTable(session, _);
+        const grid = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'islet-breakdown'});
+        const headerRow = new St.BoxLayout({style_class: 'islet-breakdown-row'});
+        headerRow.add_child(label(_('Breakdown'), 'islet-caption islet-breakdown-label islet-breakdown-head'));
+        for (const column of table.columns)
+            headerRow.add_child(label(column, 'islet-caption islet-breakdown-cell islet-breakdown-head'));
+        grid.add_child(headerRow);
+        for (const row of table.rows) {
+            const line = new St.BoxLayout({style_class: 'islet-breakdown-row'});
+            line.add_child(label(row.label, 'islet-caption islet-breakdown-label'));
+            for (const cell of row.cells)
+                line.add_child(label(cell, 'islet-caption islet-breakdown-cell'));
+            grid.add_child(line);
+        }
+        this.sessionBox.add_child(grid);
+        if (!session.exact)
+            this.sessionBox.add_child(note(_('Estimated at list prices until the session ends.')));
+    }
+
+    private renderLimits(window: InsightsWindow | null): void {
+        this.limitsBox.destroy_all_children();
+        if (!window || window.requests === 0) {
+            this.limitsBox.add_child(note(_('No Claude Code usage in this period.')));
+            return;
+        }
+        for (const flag of window.flags)
+            this.limitsBox.add_child(shareRow(flagLabel(flag.id, _), '', flag.share));
+        for (const row of window.attribution)
+            this.limitsBox.add_child(shareRow(attributionName(row.kind, row.name), attributionKindLabel(row.kind, _), row.share));
+        if (!window.flags.length && !window.attribution.length)
+            this.limitsBox.add_child(note(_('Nothing stands out: no behaviour, skill, subagent or MCP server reaches 1%.')));
     }
 }
