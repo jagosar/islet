@@ -17,6 +17,9 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="$(mktemp -d)"
 log="$work/shell.log"
 failures=0
+# Only the nested Shell's daemon (run from the sandbox): an Islet installed in the real session
+# has its own daemon, which these tests must neither count nor kill.
+nested_daemon='[i]slet-devkit/data/gnome-shell/extensions/.*/daemon/main\.js'
 trap 'pkill -f "^gnome-shell --devkit" 2>/dev/null; rm -rf "$work"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
@@ -50,7 +53,9 @@ now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 mkdir -p "$work/claude/projects/-demo"
 printf '{"type":"assistant","sessionId":"e2e","timestamp":"%s","message":{"id":"m1","model":"claude-test","usage":{"input_tokens":100,"cache_creation_input_tokens":300,"cache_read_input_tokens":9000,"output_tokens":600}}}\n' "$now" > "$work/claude/projects/-demo/e2e.jsonl"
 
-rm -rf "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/state"
+rm -rf "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/state" "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/config/Claude"
+# The Claude desktop app is "installed": its folder exists, its plan history does not yet.
+mkdir -p "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/config/Claude"
 # Animations off: they only advance while the nested window is painted, and this also exercises
 # the "reduce animation" path (the capsule must still end at the right size).
 (cd "$root" && CLAUDE_CONFIG_DIR="$work/claude" ISLET_NESTED_NO_ANIMATIONS=1 setsid nohup scripts/nested.sh > "$log" 2>&1 &)
@@ -74,6 +79,17 @@ wait_for 10 shown_is 'web needs permission' ; check "then the persistent compact
 debug call ReportAgentEvent "{'session_id': 'x', 'cwd': '/home/me/code/web', 'hook_event_name': 'Stop'}" >/dev/null
 wait_for 10 shown_is 'Claude 1.00K · 33%' ; check "back to usage once the session finished" "$(shown)" "Claude 1.00K · 33%"
 
+echo "plan usage from the desktop app and from a limit message"
+desktop="${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/config/Claude"
+mkdir -p "$desktop"
+printf '{"version":2,"samples":[{"t":%s,"org":"e2e","u":{"fh":61,"sd":22}}]}' "$(date +%s%3N)" > "$desktop/history.tmp"
+mv "$desktop/history.tmp" "$desktop/plan-usage-history.json"
+wait_for 10 shown_is 'Claude 1.00K · 61%' ; check "the desktop app's plan figure in the capsule" "$(shown)" "Claude 1.00K · 61%"
+reset_at=$(( $(date +%s) + 7200 ))
+reset_clock="$(TZ=UTC date -d "@$reset_at" +%-l:%M%P)"
+printf '{"type":"assistant","sessionId":"e2e","timestamp":"%s","isApiErrorMessage":true,"error":"rate_limit","apiError":"usage_limit_reached","message":{"id":"limit","model":"<synthetic>","content":[{"type":"text","text":"You'"'"'ve hit your session limit · resets %s (UTC)"}]}}\n' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$reset_clock" >> "$work/claude/projects/-demo/e2e.jsonl"
+wait_for 10 shown_is 'Claude 1.00K · 100%' ; check "a limit message puts the plan at 100%" "$(shown)" "Claude 1.00K · 100%"
+
 if [ -n "${E2E_KEYBOARD:-}" ]; then
     # Keyboard input is only dispatched while the nested window is painted (an occluded
     # window's frame clock is throttled), so this part needs the window to stay on top.
@@ -81,6 +97,7 @@ if [ -n "${E2E_KEYBOARD:-}" ]; then
     debug keys Control_L+Alt_L+space; sleep 0.8
     check "the shortcut opens the island" "$(field "['menuOpen']")" "True"
     check "focus lands on the Claude tab" "$(field "['keyFocus']")" "St_Button:islet-tab:Claude"
+    debug keys Right; sleep 0.4; check "Right switches to Usage" "$(field "['page']")" "usage"
     debug keys Right; sleep 0.4; check "Right switches to Music" "$(field "['page']")" "media"
     debug keys Right; sleep 0.4; check "Right switches to Focus" "$(field "['page']")" "focus"
     debug keys Escape; sleep 0.6; check "Escape closes" "$(field "['menuOpen']")" "False"
@@ -89,7 +106,7 @@ else
 fi
 
 echo "daemon crash and restart"
-pkill -9 -f '[d]aemon/main\.js'
+pkill -9 -f "$nested_daemon"
 wait_for 8 unavailable; check "the capsule greys out" "$(field "['available']")" "False"
 wait_for 20 available; check "the daemon comes back by itself" "$(field "['available']")" "True"
 wait_for 10 shown_starts 'Claude 1.00K'; check_match "usage is back after the restart" "$(shown)" '^Claude 1\.00K'
@@ -100,7 +117,7 @@ check "no JS errors in the Shell log" "$errors" "0"
 
 echo "enable() rolls back when it fails (a failure is injected at its end)"
 pkill -f "^gnome-shell --devkit"; sleep 1
-rm -rf "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/state"
+rm -rf "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/state" "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/config/Claude"
 (cd "$root" && CLAUDE_CONFIG_DIR="$work/claude" ISLET_NESTED_NO_ANIMATIONS=1 ISLET_DEV_FAIL_ENABLE=1 setsid nohup scripts/nested.sh > "$work/fail.log" 2>&1 &)
 bus_ready() { [ -s "${XDG_RUNTIME_DIR:-/tmp}/islet-devkit/bus-address" ] && grep -q "GNOME Shell started" "$work/fail.log"; }
 wait_for 90 bus_ready || { echo "the nested Shell did not start"; tail -n 20 "$work/fail.log"; exit 2; }
@@ -111,7 +128,7 @@ extension_state() {
         grep -o "'state': <[0-9.]*>" | grep -o '[0-9.]*>' | tr -d '>'
 }
 check "GNOME Shell sees the failure (state ERROR)" "$(extension_state)" "3.0"
-check "the daemon started by the failed enable() was stopped again" "$(pgrep -fc '[d]aemon/main\.js' || true)" "0"
+check "the daemon started by the failed enable() was stopped again" "$(pgrep -fc "$nested_daemon" || true)" "0"
 check "the injected error is logged once" "$(grep -c 'Extension islet@jagosar.github.io: Error: ISLET_DEV_FAIL_ENABLE' "$work/fail.log" || true)" "1"
 check "and nothing else fails (no error from disable())" "$(grep -c 'JS ERROR' "$work/fail.log" || true)" "0"
 

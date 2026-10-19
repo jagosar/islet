@@ -5,7 +5,7 @@
  * (the daemon runs with ISLET_STANDALONE=1), so these tests also run in CI.
  */
 import {spawn, spawnSync, type ChildProcess} from 'node:child_process';
-import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 
@@ -63,6 +63,8 @@ export class Sandbox {
     readonly claude = join(this.root, 'claude');
     readonly state = join(this.root, 'state');
     readonly runtime = join(this.root, 'run');
+    /** XDG_CONFIG_HOME: where the Claude desktop app keeps its plan history (Claude/). */
+    readonly config = join(this.root, 'config');
     /** dist/ as an installed extension: its folder is named by the extension's UUID, as in a real install. */
     readonly extensionDir = join(this.root, 'extensions', 'islet@jagosar.github.io');
     address = '';
@@ -72,7 +74,7 @@ export class Sandbox {
 
     static async create(): Promise<Sandbox> {
         const sandbox = new Sandbox();
-        for (const dir of [sandbox.claude, sandbox.state, sandbox.runtime, join(sandbox.root, 'extensions')])
+        for (const dir of [sandbox.claude, sandbox.state, sandbox.runtime, sandbox.config, join(sandbox.root, 'extensions')])
             mkdirSync(dir, {recursive: true, mode: 0o700});
         symlinkSync(DIST, sandbox.extensionDir);
         await sandbox.startBus();
@@ -89,6 +91,7 @@ export class Sandbox {
             XDG_STATE_HOME: this.state,
             XDG_RUNTIME_DIR: this.runtime,
             XDG_CACHE_HOME: join(this.root, 'cache'),
+            XDG_CONFIG_HOME: this.config,
             CLAUDE_CONFIG_DIR: this.claude,
             DBUS_SESSION_BUS_ADDRESS: this.address,
             ISLET_STANDALONE: '1',
@@ -146,7 +149,7 @@ export class Sandbox {
     }
 
     /** A daemon property, parsed from its JSON document. */
-    property(name: 'Usage' | 'PlanUsage' | 'Sessions'): Record<string, unknown> {
+    property(name: 'Usage' | 'PlanUsage' | 'Sessions' | 'Insights'): Record<string, unknown> {
         const result = this.run('get', name);
         if (result.status !== 0)
             throw new Error(`reading ${name} failed: ${result.stderr}`);
@@ -187,6 +190,17 @@ export class Sandbox {
         return path;
     }
 
+    /** Writes the Claude desktop app's plan history, the way the app does (whole file). */
+    writeDesktopHistory(samples: {t: number; fh?: number; sd?: number}[]): string {
+        const dir = join(this.config, 'Claude');
+        mkdirSync(dir, {recursive: true});
+        const path = join(dir, 'plan-usage-history.json');
+        const document = {version: 2, samples: samples.map(({t, fh, sd}) => ({t, org: 'org', u: {fh, sd}}))};
+        writeFileSync(`${path}.tmp`, JSON.stringify(document));
+        renameSync(`${path}.tmp`, path);
+        return path;
+    }
+
     append(path: string, text: string | Buffer): void {
         appendFileSync(path, text);
     }
@@ -212,9 +226,9 @@ export const line = {
     user: (session: string, text = 'hello'): string =>
         JSON.stringify({type: 'user', sessionId: session, timestamp: new Date().toISOString(), message: {role: 'user', content: text}}),
 
-    assistant: (session: string, id: string, model = 'claude-test', tokens = {input: 10, cacheWrite: 200, cacheRead: 3000, output: 40}, timestamp = new Date().toISOString()): string =>
+    assistant: (session: string, id: string, model = 'claude-test', tokens = {input: 10, cacheWrite: 200, cacheRead: 3000, output: 40}, timestamp = new Date().toISOString(), extra: Record<string, unknown> = {}): string =>
         JSON.stringify({
-            type: 'assistant', sessionId: session, timestamp,
+            type: 'assistant', sessionId: session, timestamp, ...extra,
             message: {
                 id, model, content: [{type: 'text', text: 'never read'}],
                 usage: {
@@ -222,6 +236,13 @@ export const line = {
                     cache_read_input_tokens: tokens.cacheRead, output_tokens: tokens.output,
                 },
             },
+        }),
+
+    /** Claude Code's message when a plan limit is hit. */
+    limit: (session: string, text: string, timestamp = new Date().toISOString()): string =>
+        JSON.stringify({
+            type: 'assistant', sessionId: session, timestamp, isApiErrorMessage: true, error: 'rate_limit', apiError: 'usage_limit_reached',
+            message: {id: `limit-${timestamp}`, model: '<synthetic>', content: [{type: 'text', text}]},
         }),
 
     costState: (session: string, model: string, tokens: {input: number; cacheWrite: number; cacheRead: number; output: number}): string =>

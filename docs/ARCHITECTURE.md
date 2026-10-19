@@ -117,6 +117,7 @@ GSettings (`org.gnome.shell.extensions.islet`), edited in a libadwaita preferenc
 | `Usage` | property `s` | `UsageSnapshot`: today's tokens per model, fresh tokens per day |
 | `PlanUsage` | property `s` | `PlanUsage`: 5 h / 7 d windows and `measuredAt`, or `null` |
 | `Sessions` | property `s` | `AgentSession[]`: current Claude Code sessions |
+| `Insights` | property `s` | `Insights`: what is using the plan limits (24 h and 7 days) and the current session, or `null` |
 | `ReportAgentEvent(a{ss})` | method | from the hook bridge |
 | `ReportPlanUsage(a{sd})` | method | from the status line bridge |
 | `AgentEvent(a{ss})` | signal | re-emitted agent events, for live activities |
@@ -203,10 +204,34 @@ work: no watchers, no timers, no processes.
   session's last day. The UI never calls a running session's figures exact, and leads with
   fresh tokens, which the auxiliary calls barely affect. `scripts/usage-report.mjs` repeats the
   comparison on any machine.
-- No API-equivalent cost in v1: on a subscription it is misleading and the price table is a
-  maintenance burden.
+- ~~No API-equivalent cost in v1~~ **Revised in 0.2.0:** the Usage tab shows the current
+  session's cost, like Claude Code's own `/usage` and the desktop app do. An ended session shows
+  Claude Code's own figure from its `cost-state` (exact). A running one is estimated at public list
+  prices by model family (Opus $5, Sonnet $3, Haiku $1 per million input tokens; cache write
+  1.25×, cache read 0.1×, output 5×) and is marked "≈". Calibrating prices from `cost-state` was
+  tried and rejected: a least-squares fit over 55 sessions gave a negative input price (long-
+  context tiers and cache lifetimes make it unstable).
 
 **Claude Code — plan usage (5 h and 7 d windows)**
+
+Anthropic's servers compute plan usage; Claude Code and the desktop app fetch it with the
+user's login. Islet never does that (no token, no network). It merges what already reaches this
+computer, always keeping the most recent reading (`src/core/planSources.ts`):
+
+| Source | Windows | Reset time | When |
+|---|---|---|---|
+| Status line bridge (terminal sessions) | both | ✓ | several times per reply |
+| The desktop app's `~/.config/Claude/plan-usage-history.json` | both | ✗ | every ~15 min while the app runs |
+| "You've hit your session limit · resets 4:20pm (Europe/Berlin)" in transcripts | the one it names, at 100 % | ✓ | when a limit is hit, in every entry point |
+
+- A reading without a reset time keeps the previous one while it is the same window (not reset
+  yet, percentage not lower). The capsule shows a figure for 30 minutes after it was measured,
+  longer than the desktop app's sampling interval.
+- The desktop history is the desktop app's own file. Islet only reads it, watches its folder
+  (the app replaces the file by renaming), parses it defensively (unknown shapes read as no data)
+  and opens nothing else there.
+
+Status line details:
 - Source: the `rate_limits` object Claude Code passes to its **status line** command
   (`five_hour` / `seven_day`, `used_percentage`, `resets_at`). Present for Pro/Max only, after
   the first response of a session; either window may be absent.
@@ -218,6 +243,27 @@ work: no watchers, no timers, no processes.
   must say "plan usage comes from terminal sessions" and show when the figure was last measured,
   and the compact capsule should not lead with a stale percentage.
 - Never computed from token counts. Never read from the OAuth token or undocumented endpoints.
+
+**Claude Code — what is using your limits** (the Usage tab, since 0.2.0)
+- Claude Code records, on every response in its transcripts, what its own `/usage` breakdown
+  attributes it to: `attributionMcpServer`, `attributionSkill`, `attributionAgent`,
+  `attributionPlugin`. Islet reads these names (configuration names, not content) and the token
+  counts, keeps a week of responses, and computes for the last 24 hours and 7 days
+  (`src/core/usage/insights.ts`):
+  - the share of usage per MCP server, skill, subagent and plugin (rows of 1 % or more, top six);
+  - behaviours that reach 10 %: requests with more than 150k tokens of context, from sessions
+    started more than 8 hours earlier, made while 4 or more sessions were active (a request in the
+    previous 10 minutes), "always-on context" (the session's first context, re-read from cache on
+    every request: system prompt, tools, CLAUDE.md), and cache misses (a later request writing
+    most of a context over 20k again).
+- Usage is weighted by estimated cost, so a cache read counts a tenth of an input token. As in
+  `/usage`, figures are approximate, overlap, and cover this computer only.
+- Checked against the desktop app's panel on the same data: 81/51/21/14 % against 79/63/19/12 %
+  for the four behaviours, and the same attribution rows within a point (different 24-hour
+  windows).
+- The current session (the one with the latest main-thread response) shows cost, active time
+  (gaps of up to 5 minutes), API time and changed lines (from `cost-state`, once written), the
+  model mix, cache hits, and tokens and cost per model.
 
 **Claude Code — live agent activity** (the most useful feature)
 - Source: **hooks**, which Claude Code fires "wherever it runs", including IDE extensions and the

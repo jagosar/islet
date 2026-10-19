@@ -1,8 +1,9 @@
 import {describe, expect, it} from 'vitest';
 import {
-    decodePlanUsage, decodeSessions, decodeUsage, encodePlanUsage, encodeSessions, encodeUsage,
+    decodeInsights, decodePlanUsage, decodeSessions, decodeUsage, encodeInsights, encodePlanUsage, encodeSessions, encodeUsage,
     parsePlanUsageReport, type AgentSession, type PlanUsage, type UsageSnapshot,
 } from '../../src/core/protocol.js';
+import type {Insights} from '../../src/core/usage/insights.js';
 
 const plan: PlanUsage = {
     measuredAt: 1_792_150_000,
@@ -40,12 +41,12 @@ describe('parsePlanUsageReport', () => {
         expect(parsePlanUsageReport({
             five_hour_used_percentage: 33, five_hour_resets_at: 1_792_160_000,
             seven_day_used_percentage: 4, seven_day_resets_at: 1_792_600_000,
-        }, 1_792_150_000)).toEqual(plan);
+        }, 1_792_150_000)).toEqual({...plan, source: 'statusline'});
     });
 
     it('skips a window with a missing half', () => {
         expect(parsePlanUsageReport({five_hour_used_percentage: 10, seven_day_used_percentage: 4, seven_day_resets_at: 9}, 1))
-            .toEqual({measuredAt: 1, sevenDay: {usedPercentage: 4, resetsAt: 9}});
+            .toEqual({measuredAt: 1, source: 'statusline', sevenDay: {usedPercentage: 4, resetsAt: 9}});
     });
 
     it.each([
@@ -94,5 +95,63 @@ describe('sessions document', () => {
 
     it('rejects an unknown state', () => {
         expect(decodeSessions(JSON.stringify({version: 1, sessions: [{...sessions[0], state: 'sleeping'}]}))).toBeNull();
+    });
+});
+
+describe('plan windows without a reset time', () => {
+    it('round-trips a desktop reading', () => {
+        const desktop: PlanUsage = {measuredAt: 5, source: 'desktop', fiveHour: {usedPercentage: 45}, sevenDay: {usedPercentage: 20}};
+        expect(decodePlanUsage(encodePlanUsage(desktop))).toEqual(desktop);
+    });
+
+    it.each([
+        ['an unknown source', {measuredAt: 5, source: 'cloud', fiveHour: {usedPercentage: 1}}],
+        ['a reset time that is not a count', {measuredAt: 5, fiveHour: {usedPercentage: 1, resetsAt: 'soon'}}],
+    ])('rejects %s', (_name, document) => {
+        expect(decodePlanUsage(JSON.stringify({version: 1, plan: document}))).toBeNull();
+    });
+});
+
+describe('insights document', () => {
+    const insights: Insights = {
+        generatedAt: 100,
+        day: {requests: 3, estimatedUsd: 2.5, attribution: [{kind: 'mcp', name: 'ccd_turn', share: 0.15}], flags: [{id: 'long-context', share: 0.79}]},
+        week: {requests: 0, estimatedUsd: 0, attribution: [], flags: []},
+        session: {
+            sessionId: 's', project: 'islet', startedAt: 1, lastAt: 2, activeSeconds: 60, requests: 3, usd: 86.5, exact: true,
+            cacheHitRatio: 0.99, apiSeconds: 8280, linesAdded: 9226, linesRemoved: 98,
+            models: [{model: 'claude-opus-5-5', tokens: {input: 1, cacheWrite: 2, cacheRead: 3, output: 4}, share: 1, usd: 86.5}],
+        },
+    };
+
+    it('round-trips', () => {
+        expect(decodeInsights(encodeInsights(insights))).toEqual(insights);
+        expect(decodeInsights(encodeInsights({...insights, session: null}))?.session).toBeNull();
+    });
+
+    it('decodes "no data yet" as null', () => {
+        expect(decodeInsights(encodeInsights(null))).toBeNull();
+    });
+
+    const broken = (patch: (copy: Record<string, any>) => void) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+        const copy = JSON.parse(JSON.stringify(insights)) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+        patch(copy);
+        return JSON.stringify({version: 1, insights: copy});
+    };
+
+    it.each([
+        ['an unknown attribution kind', (c: Record<string, any>) => { c.day.attribution[0].kind = 'tool'; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+        ['a share over 1', (c: Record<string, any>) => { c.day.flags[0].share = 1.5; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+        ['an unknown flag', (c: Record<string, any>) => { c.week.flags = [{id: 'nope', share: 0.5}]; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+        ['a negative cost', (c: Record<string, any>) => { c.session.usd = -1; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+        ['bad model tokens', (c: Record<string, any>) => { c.session.models[0].tokens.input = 'x'; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+        ['a bad optional count', (c: Record<string, any>) => { c.session.linesAdded = -3; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+        ['a missing window', (c: Record<string, any>) => { delete c.week; }], // eslint-disable-line @typescript-eslint/no-explicit-any
+    ])('rejects %s', (_name, patch) => {
+        expect(decodeInsights(broken(patch))).toBeNull();
+    });
+
+    it('rejects another protocol version', () => {
+        expect(decodeInsights(JSON.stringify({version: 2, insights}))).toBeNull();
     });
 });

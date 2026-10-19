@@ -19,10 +19,12 @@ export const INTERFACE_XML = `
   <interface name="${INTERFACE_NAME}">
     <!-- Today's usage per model and fresh tokens per day (UsageSnapshot). -->
     <property name="Usage" type="s" access="read"/>
-    <!-- Claude plan windows and when they were measured (PlanUsage), or null. -->
+    <!-- Claude plan windows, when and where they were measured (PlanUsage), or null. -->
     <property name="PlanUsage" type="s" access="read"/>
     <!-- Current Claude Code sessions (AgentSession[]). -->
     <property name="Sessions" type="s" access="read"/>
+    <!-- What is using the plan limits, and the current session (Insights), or null. -->
+    <property name="Insights" type="s" access="read"/>
 
     <!-- From the hook bridge: session_id, cwd, hook_event_name, notification_type. -->
     <method name="ReportAgentEvent">

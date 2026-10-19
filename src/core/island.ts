@@ -82,7 +82,7 @@ export function liveActivityForAgentEvent(event: AgentEvent, t: Translate = iden
 }
 
 /** Plan thresholds that raise a live activity when the 5-hour window crosses them upward. */
-export const PLAN_THRESHOLDS = [75, 90] as const;
+export const PLAN_THRESHOLDS = [75, 90, 100] as const;
 
 /** The highest threshold crossed between two plan readings, or null. */
 export function planThresholdCrossed(previous: PlanUsage | null, next: PlanUsage | null): number | null {

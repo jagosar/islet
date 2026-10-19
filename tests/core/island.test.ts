@@ -91,6 +91,9 @@ describe('planThresholdCrossed', () => {
         [plan(80), plan(70), null],
         [plan(95, now + 10), plan(80, now + 20000), 75],
         [plan(70), {measuredAt: now}, null],
+        [plan(95), plan(100), 100],
+        [plan(91, undefined), {measuredAt: now, source: 'desktop', fiveHour: {usedPercentage: 100}}, 100],
+        [{measuredAt: now, fiveHour: {usedPercentage: 70}}, {measuredAt: now, fiveHour: {usedPercentage: 80}}, 75],
     ])('%o -> %o: %s', (previous, next, expected) => {
         expect(planThresholdCrossed(previous, next)).toBe(expected);
     });

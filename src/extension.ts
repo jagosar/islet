@@ -22,6 +22,7 @@ import {ClaudePanel} from './ui/claudePanel.js';
 import {ExpandedView} from './ui/expandedView.js';
 import {FocusPanel} from './ui/focusPanel.js';
 import {MediaPanel} from './ui/mediaPanel.js';
+import {UsagePanel} from './ui/usagePanel.js';
 
 const CAPSULE_ROLE = 'islet-capsule';
 /** The GSettings key holding the shortcut that opens or closes the island. */
@@ -31,7 +32,7 @@ const SPACER_ROLE = 'islet-spacer';
 const PANEL_REFRESH_S = 30;
 /** Players already playing when Islet starts are not announced as a new song. */
 const MEDIA_SETTLE_MS = 3000;
-const NO_DAEMON: DaemonState = {available: false, usage: null, plan: null, sessions: []};
+const NO_DAEMON: DaemonState = {available: false, usage: null, plan: null, sessions: [], insights: null};
 
 function nowSeconds(): number {
     return Math.floor(GLib.get_real_time() / 1_000_000);
@@ -46,6 +47,7 @@ export default class IsletExtension extends Extension {
     private spacer: CapsuleSpacer | null = null;
     private expanded: ExpandedView | null = null;
     private panel: ClaudePanel | null = null;
+    private usagePanel: UsagePanel | null = null;
     private mediaPanel: MediaPanel | null = null;
     private focusPanel: FocusPanel | null = null;
     private daemon: DaemonClient | null = null;
@@ -90,6 +92,7 @@ export default class IsletExtension extends Extension {
 
         this.capsule = new Capsule();
         this.panel = new ClaudePanel();
+        this.usagePanel = new UsagePanel();
         this.mediaPanel = new MediaPanel({
             playPause: busName => this.mpris?.playPause(busName),
             next: busName => this.mpris?.next(busName),
@@ -103,6 +106,7 @@ export default class IsletExtension extends Extension {
         });
         this.expanded = new ExpandedView([
             {id: 'claude', title: _('Claude'), actor: this.panel},
+            {id: 'usage', title: _('Usage'), actor: this.usagePanel},
             {id: 'media', title: _('Music'), actor: this.mediaPanel},
             {id: 'focus', title: _('Focus'), actor: this.focusPanel},
         ]);
@@ -165,6 +169,7 @@ export default class IsletExtension extends Extension {
         // Destroyed with the capsule's menu.
         this.expanded = null;
         this.panel = null;
+        this.usagePanel = null;
         this.mediaPanel = null;
         this.focusPanel = null;
         this.spacer?.destroy();
@@ -196,17 +201,19 @@ export default class IsletExtension extends Extension {
         const crossed = this.state?.available ? planThresholdCrossed(this.state.plan, state.plan) : null;
         this.state = state;
         if (crossed !== null && state.plan?.fiveHour) {
-            const reset = formatLocal(state.plan.fiveHour.resetsAt, '%H:%M');
+            const resetsAt = state.plan.fiveHour.resetsAt;
             this.pushLive({
                 key: 'plan',
-                text: _('Claude plan at %s · resets %s').replace('%s', `${crossed}%`).replace('%s', reset),
+                text: resetsAt === undefined
+                    ? _('Claude plan at %s').replace('%s', `${crossed}%`)
+                    : _('Claude plan at %s · resets %s').replace('%s', `${crossed}%`).replace('%s', formatLocal(resetsAt, '%H:%M')),
                 tone: 'attention',
                 priority: 2,
             });
         }
         this.render();
         if (this.capsule?.menu instanceof PopupMenu.PopupMenu && this.capsule.menu.isOpen)
-            this.panel?.update(state);
+            this.updatePanels(state);
     }
 
     private onAgentEvent(fields: Record<string, string>): void {
@@ -275,14 +282,20 @@ export default class IsletExtension extends Extension {
 
     private onMenuToggled(open: boolean): void {
         if (open && this.state)
-            this.panel?.update(this.state);
+            this.updatePanels(this.state);
         // The menu manager sets key focus after this signal, so take it on the next cycle.
         this.schedule('focus-tab', open ? 0 : null, () => this.expanded?.focusSelectedTab());
         const refresh = () => {
             this.panel?.refresh();
+            this.usagePanel?.refresh();
             this.schedule('panel', PANEL_REFRESH_S * 1000, refresh);
         };
         this.schedule('panel', open ? PANEL_REFRESH_S * 1000 : null, refresh);
+    }
+
+    private updatePanels(state: DaemonState): void {
+        this.panel?.update(state);
+        this.usagePanel?.update(state);
     }
 
     /** One timer per name: replaces the previous one; null just cancels. */

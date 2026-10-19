@@ -7,21 +7,28 @@
  * below, so a malformed or newer document becomes "no data" instead of an error in the Shell.
  */
 import type {TokenCounts} from './usage/claudeTranscript.js';
+import type {
+    AttributionKind, AttributionShare, FlagId, FlagShare, Insights, InsightsWindow, SessionModel, SessionSummary,
+} from './usage/insights.js';
 
 export const PROTOCOL_VERSION = 1;
 
 export interface PlanWindow {
     /** 0 to 100. */
     usedPercentage: number;
-    /** Unix epoch seconds. */
-    resetsAt: number;
+    /** Unix epoch seconds; absent when the source does not say (the desktop app's history). */
+    resetsAt?: number;
 }
+
+/** Where the latest plan figures came from. */
+export type PlanSource = 'statusline' | 'desktop' | 'limit';
 
 export interface PlanUsage {
     fiveHour?: PlanWindow;
     sevenDay?: PlanWindow;
-    /** Unix epoch seconds when the daemon received the figures. */
+    /** Unix epoch seconds when the figures were measured. */
     measuredAt: number;
+    source?: PlanSource;
 }
 
 export interface DayUsage {
@@ -78,10 +85,14 @@ function encode(document: object): string {
 function decodeWindow(value: unknown): PlanWindow | undefined | null {
     if (value === undefined)
         return undefined;
-    if (!isObject(value) || !isCount(value.usedPercentage) || value.usedPercentage > 100 || !isCount(value.resetsAt))
+    if (!isObject(value) || !isCount(value.usedPercentage) || value.usedPercentage > 100)
         return null;
-    return {usedPercentage: value.usedPercentage, resetsAt: value.resetsAt};
+    if (value.resetsAt === undefined)
+        return {usedPercentage: value.usedPercentage};
+    return isCount(value.resetsAt) ? {usedPercentage: value.usedPercentage, resetsAt: value.resetsAt} : null;
 }
+
+const PLAN_SOURCES: readonly PlanSource[] = ['statusline', 'desktop', 'limit'];
 
 export function encodePlanUsage(plan: PlanUsage | null): string {
     return encode({plan});
@@ -95,10 +106,13 @@ export function decodePlanUsage(text: string): PlanUsage | null {
     const sevenDay = decodeWindow(plan.sevenDay);
     if (fiveHour === null || sevenDay === null || (!fiveHour && !sevenDay))
         return null;
+    if (plan.source !== undefined && !PLAN_SOURCES.includes(plan.source as PlanSource))
+        return null;
     return {
         measuredAt: plan.measuredAt,
         ...(fiveHour ? {fiveHour} : {}),
         ...(sevenDay ? {sevenDay} : {}),
+        ...(plan.source !== undefined ? {source: plan.source as PlanSource} : {}),
     };
 }
 
@@ -119,7 +133,7 @@ export function parsePlanUsageReport(fields: Record<string, number>, now: number
     const sevenDay = window('seven_day');
     if (!fiveHour && !sevenDay)
         return null;
-    return {measuredAt: now, ...(fiveHour ? {fiveHour} : {}), ...(sevenDay ? {sevenDay} : {})};
+    return {measuredAt: now, source: 'statusline', ...(fiveHour ? {fiveHour} : {}), ...(sevenDay ? {sevenDay} : {})};
 }
 
 function decodeTokens(value: unknown): TokenCounts | null {
@@ -181,4 +195,80 @@ export function decodeSessions(text: string): AgentSession[] | null {
         decoded.push({sessionId: session.sessionId, project: session.project, state: session.state as SessionState, since: session.since});
     }
     return decoded;
+}
+
+export function encodeInsights(insights: Insights | null): string {
+    return encode({insights});
+}
+
+const ATTRIBUTION_KINDS: readonly AttributionKind[] = ['mcp', 'skill', 'agent', 'plugin'];
+const FLAG_IDS: readonly FlagId[] = ['long-context', 'long-session', 'parallel', 'always-on-context', 'cache-miss'];
+
+function isShare(value: unknown): value is number {
+    return isCount(value) && value <= 1;
+}
+
+function decodeInsightsWindow(value: unknown): InsightsWindow | null {
+    if (!isObject(value) || !isCount(value.requests) || !isCount(value.estimatedUsd) ||
+        !Array.isArray(value.attribution) || !Array.isArray(value.flags))
+        return null;
+    const attribution: AttributionShare[] = [];
+    for (const row of value.attribution) {
+        if (!isObject(row) || !ATTRIBUTION_KINDS.includes(row.kind as AttributionKind) ||
+            typeof row.name !== 'string' || !isShare(row.share))
+            return null;
+        attribution.push({kind: row.kind as AttributionKind, name: row.name, share: row.share});
+    }
+    const flags: FlagShare[] = [];
+    for (const flag of value.flags) {
+        if (!isObject(flag) || !FLAG_IDS.includes(flag.id as FlagId) || !isShare(flag.share))
+            return null;
+        flags.push({id: flag.id as FlagId, share: flag.share});
+    }
+    return {requests: value.requests, estimatedUsd: value.estimatedUsd, attribution, flags};
+}
+
+function decodeSession(value: unknown): SessionSummary | null | undefined {
+    if (value === null)
+        return undefined;
+    if (!isObject(value) || typeof value.sessionId !== 'string' || typeof value.project !== 'string' ||
+        !isCount(value.startedAt) || !isCount(value.lastAt) || !isCount(value.activeSeconds) ||
+        !isCount(value.requests) || !Array.isArray(value.models) || !isCount(value.usd) ||
+        typeof value.exact !== 'boolean' || !isShare(value.cacheHitRatio))
+        return null;
+    const models: SessionModel[] = [];
+    for (const row of value.models) {
+        if (!isObject(row) || typeof row.model !== 'string' || !isShare(row.share) || !isCount(row.usd))
+            return null;
+        const tokens = decodeTokens(row.tokens);
+        if (!tokens)
+            return null;
+        models.push({model: row.model, tokens, share: row.share, usd: row.usd});
+    }
+    const summary: SessionSummary = {
+        sessionId: value.sessionId, project: value.project, startedAt: value.startedAt, lastAt: value.lastAt,
+        activeSeconds: value.activeSeconds, requests: value.requests, models, usd: value.usd,
+        exact: value.exact, cacheHitRatio: value.cacheHitRatio,
+    };
+    for (const key of ['apiSeconds', 'linesAdded', 'linesRemoved'] as const) {
+        const field = value[key];
+        if (field === undefined)
+            continue;
+        if (!isCount(field))
+            return null;
+        summary[key] = field;
+    }
+    return summary;
+}
+
+export function decodeInsights(text: string): Insights | null {
+    const insights = parseDocument(text)?.insights;
+    if (!isObject(insights) || !isCount(insights.generatedAt))
+        return null;
+    const day = decodeInsightsWindow(insights.day);
+    const week = decodeInsightsWindow(insights.week);
+    const session = decodeSession(insights.session);
+    if (!day || !week || session === null)
+        return null;
+    return {generatedAt: insights.generatedAt, day, week, session: session ?? null};
 }
