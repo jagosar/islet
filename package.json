@@ -27,9 +27,9 @@
     "@girs/gjs": "5.5.0",
     "@girs/gnome-shell": "50.0.4",
     "@vitest/coverage-v8": "5.0.5",
-    "eslint": "10.12.0",
+    "eslint": "10.13.0",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.2",
+    "typescript-eslint": "8.72.0",
     "vitest": "5.0.5"
   }
 }
