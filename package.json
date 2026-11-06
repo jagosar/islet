@@ -26,10 +26,10 @@
     "@eslint/js": "10.0.1",
     "@girs/gjs": "5.5.0",
     "@girs/gnome-shell": "50.0.4",
-    "@vitest/coverage-v8": "5.0.5",
+    "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.12.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2",
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   }
 }
